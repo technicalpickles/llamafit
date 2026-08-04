@@ -83,7 +83,7 @@ export function parseParameterSize(raw: string): number | null {
   return null;
 }
 
-async function ollamaFetch<T>(path: string, init?: RequestInit): Promise<T> {
+async function ollamaRequest(path: string, init?: RequestInit): Promise<Response> {
   let res: Response;
   try {
     res = await fetch(`${OLLAMA_BASE_URL}${path}`, init);
@@ -95,6 +95,11 @@ async function ollamaFetch<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     throw new Error(`Ollama server returned ${res.status} for ${path}`);
   }
+  return res;
+}
+
+async function ollamaFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await ollamaRequest(path, init);
   return res.json() as Promise<T>;
 }
 
@@ -135,7 +140,7 @@ export async function generate(
 }
 
 export async function unloadModel(model: string): Promise<void> {
-  await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
+  await ollamaRequest('/api/generate', {
     method: 'POST',
     body: JSON.stringify({ model, keep_alive: 0 }),
   });
