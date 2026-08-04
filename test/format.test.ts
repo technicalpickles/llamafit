@@ -12,6 +12,8 @@ const sampleResult: CheckResult = {
       parameterSizeB: 12.2,
       quantizationLevel: 'Q4_K_M',
       footprintGb: 8.58,
+      estimateSource: 'estimated',
+      quantKnown: true,
       baselineVerdict: 'comfortable',
       currentVerdict: 'will-thrash',
     },
@@ -46,9 +48,55 @@ describe('formatCheckTable', () => {
     expect(table.toLowerCase()).toContain('cloud');
   });
 
-  it('shows a scrape warning when present', () => {
+  it('keeps the scrape warning out of the table (the CLI prints it on stderr)', () => {
     const table = formatCheckTable({ ...sampleResult, scrapeWarning: 'could not reach ollama.com' });
-    expect(table).toContain('could not reach ollama.com');
+    expect(table).not.toContain('could not reach ollama.com');
+  });
+
+  it('marks an estimate built on an unknown quantization, and explains the markers', () => {
+    const table = formatCheckTable({
+      ...sampleResult,
+      rows: [
+        {
+          name: 'pd95/gptoss-mlx',
+          source: 'remote',
+          parameterSizeB: 20,
+          quantizationLevel: 'Q4_K_M',
+          footprintGb: 14.06,
+          estimateSource: 'estimated',
+          quantKnown: false,
+          baselineVerdict: 'will-thrash',
+          currentVerdict: 'will-thrash',
+        },
+      ],
+    });
+    const row = table.split('\n').find((l) => l.startsWith('pd95/gptoss-mlx'))!;
+    expect(row).toContain('~14.1'); // estimated, not measured
+    expect(row).toContain('Q4_K_M?'); // quantization was assumed
+    expect(table).toContain('quantization not reported');
+  });
+
+  it('shows a measured footprint bare, with no estimate marker', () => {
+    const table = formatCheckTable({
+      ...sampleResult,
+      rows: [
+        {
+          name: 'gemma3:12b',
+          source: 'local',
+          parameterSizeB: 12.2,
+          quantizationLevel: 'Q4_K_M',
+          footprintGb: 8.643862854,
+          estimateSource: 'measured',
+          quantKnown: true,
+          baselineVerdict: 'comfortable',
+          currentVerdict: 'comfortable',
+        },
+      ],
+    });
+    expect(table).not.toContain('~');
+    expect(table).not.toContain('Q4_K_M?');
+    const row = table.split('\n').find((l) => l.startsWith('gemma3:12b'))!;
+    expect(row).toContain('8.6');
   });
 });
 

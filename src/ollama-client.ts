@@ -1,5 +1,9 @@
+// OLLAMA_HOST is documented as either `host:port` or a full URL, so only add a
+// scheme when there isn't one already (otherwise `http://http://host:port`).
 const OLLAMA_BASE_URL = process.env.OLLAMA_HOST
-  ? `http://${process.env.OLLAMA_HOST}`
+  ? process.env.OLLAMA_HOST.startsWith('http')
+    ? process.env.OLLAMA_HOST
+    : `http://${process.env.OLLAMA_HOST}`
   : 'http://localhost:11434';
 
 export interface OllamaModelDetails {

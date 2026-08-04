@@ -3,20 +3,37 @@ import type { CheckResult } from './check.js';
 import type { BenchResult } from './bench.js';
 
 export function formatCheckTable(result: CheckResult): string {
-  const header = ['MODEL', 'SOURCE', 'PARAMS(B)', 'QUANT', 'EST FOOTPRINT(GB)', 'BASELINE', 'CURRENT'];
-  const rows = result.rows.map((r) => [
-    r.name,
-    r.source,
-    r.parameterSizeB !== null ? r.parameterSizeB.toFixed(1) : '?',
-    r.quantizationLevel ?? '?',
-    r.footprintGb !== null ? r.footprintGb.toFixed(1) : '?',
-    r.baselineVerdict,
-    r.currentVerdict,
-  ]);
+  const header = ['MODEL', 'SOURCE', 'PARAMS(B)', 'QUANT', 'FOOTPRINT(GB)', 'BASELINE', 'CURRENT'];
+  const rows = result.rows.map((r) => {
+    // Measured footprints print bare; estimates get a `~`, and an estimate built on a
+    // guessed quantization also gets a `?` on the quant, so false precision is visible.
+    const measured = r.estimateSource === 'measured';
+    const footprint = r.footprintGb !== null ? r.footprintGb.toFixed(1) : '?';
+    return [
+      r.name,
+      r.source,
+      r.parameterSizeB !== null ? r.parameterSizeB.toFixed(1) : '?',
+      r.quantizationLevel === null ? '?' : r.quantizationLevel + (r.quantKnown ? '' : '?'),
+      measured || r.footprintGb === null ? footprint : `~${footprint}`,
+      r.baselineVerdict,
+      r.currentVerdict,
+    ];
+  });
   const widths = header.map((h, i) => Math.max(h.length, ...rows.map((row) => row[i].length)));
   const formatRow = (cells: string[]) => cells.map((c, i) => c.padEnd(widths[i])).join('  ');
 
   const lines = [formatRow(header), ...rows.map(formatRow)];
+
+  const legend: string[] = [];
+  if (result.rows.some((r) => r.estimateSource === 'estimated' && r.footprintGb !== null)) {
+    legend.push('~ = estimated from parameter count and quantization (model not currently loaded)');
+  }
+  if (result.rows.some((r) => !r.quantKnown && r.quantizationLevel !== null)) {
+    legend.push('? after QUANT = quantization not reported; assumed for the estimate');
+  }
+  if (legend.length > 0) {
+    lines.push('', ...legend);
+  }
 
   if (result.cloudModels.length > 0) {
     lines.push('', `Cloud models (run on Ollama Cloud, no local footprint): ${result.cloudModels.join(', ')}`);
@@ -25,12 +42,8 @@ export function formatCheckTable(result: CheckResult): string {
   lines.push(
     '',
     `Baseline headroom (total − ${MACOS_BASELINE_RESERVE_GB}GB macOS reserve): ${result.baselineHeadroomGb.toFixed(1)}GB`,
-    `Current headroom (live free memory right now): ${result.currentHeadroomGb.toFixed(2)}GB`
+    `Current headroom (total − wired ${result.system.wiredGb.toFixed(1)}GB, approximate): ${result.currentHeadroomGb.toFixed(2)}GB`
   );
-
-  if (result.scrapeWarning) {
-    lines.push('', `Warning: ${result.scrapeWarning}`);
-  }
 
   return lines.join('\n');
 }

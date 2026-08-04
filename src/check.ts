@@ -1,8 +1,11 @@
 import {
   fetchTags as realFetchTags,
+  fetchPs as realFetchPs,
   isCloudModel,
   parseParameterSize,
   type OllamaTagsResponse,
+  type OllamaPsResponse,
+  type OllamaPsModel,
 } from './ollama-client.js';
 import { readSystemMemory as realReadSystemMemory, type SystemMemoryState } from './system-memory.js';
 import { estimateFootprint, classifyVerdict, type Verdict, MACOS_BASELINE_RESERVE_GB } from './estimate.js';
@@ -14,6 +17,10 @@ export interface CheckRow {
   parameterSizeB: number | null;
   quantizationLevel: string | null;
   footprintGb: number | null;
+  /** 'measured' means footprintGb is a real size_vram reading from /api/ps, not formula output. */
+  estimateSource: 'measured' | 'estimated';
+  /** False when Ollama reported no quantization and we fell back to an assumed one. */
+  quantKnown: boolean;
   baselineVerdict: Verdict | 'unknown';
   currentVerdict: Verdict | 'unknown';
 }
@@ -29,24 +36,33 @@ export interface CheckResult {
 
 export interface CheckDeps {
   fetchTags: () => Promise<OllamaTagsResponse>;
+  fetchPs: () => Promise<OllamaPsResponse>;
   readSystemMemory: () => SystemMemoryState;
   scrapeSearch: (query: string) => Promise<RemoteModelCandidate[]>;
 }
 
 const defaultDeps: CheckDeps = {
   fetchTags: realFetchTags,
+  fetchPs: realFetchPs,
   readSystemMemory: realReadSystemMemory,
   scrapeSearch: realScrapeSearch,
 };
 
 export async function runCheck(query = 'mlx', deps: CheckDeps = defaultDeps): Promise<CheckResult> {
-  const tags = await deps.fetchTags();
+  const [tags, ps] = await Promise.all([deps.fetchTags(), deps.fetchPs()]);
   const localModels = tags.models.filter((m) => !isCloudModel(m));
   const cloudModels = tags.models.filter(isCloudModel).map((m) => m.name);
+  const running = new Map<string, OllamaPsModel>(ps.models.map((m) => [m.name, m]));
 
   const system = deps.readSystemMemory();
   const baselineHeadroomGb = system.totalGb - MACOS_BASELINE_RESERVE_GB;
-  const currentHeadroomGb = system.unusedGb;
+  // Deliberate approximation: wired is the only genuinely non-reclaimable figure our
+  // system-memory reader captures. Everything else (active, inactive, compressed, free)
+  // is at least theoretically available to a big new allocation, at some performance
+  // cost. macOS's `unused` sits near zero even when idle — using it directly would call
+  // everything will-thrash. This is not exact "available" memory: `top`'s summary line
+  // gives us no active/inactive/purgeable breakdown to do better.
+  const currentHeadroomGb = system.totalGb - system.wiredGb;
 
   let remoteCandidates: RemoteModelCandidate[] = [];
   let scrapeWarning: string | null = null;
@@ -58,6 +74,25 @@ export async function runCheck(query = 'mlx', deps: CheckDeps = defaultDeps): Pr
 
   const localRows: CheckRow[] = localModels.map((m) => {
     const paramB = parseParameterSize(m.details.parameter_size);
+
+    // A currently-loaded model reports its real resident size. Prefer that over the
+    // formula every time — no reason to estimate something Ollama already measured.
+    const loaded = running.get(m.name);
+    if (loaded) {
+      const measuredGb = loaded.size_vram / 1e9;
+      return {
+        name: m.name,
+        source: 'local',
+        parameterSizeB: paramB,
+        quantizationLevel: loaded.details.quantization_level || null,
+        footprintGb: measuredGb,
+        estimateSource: 'measured',
+        quantKnown: true,
+        baselineVerdict: classifyVerdict(measuredGb, baselineHeadroomGb),
+        currentVerdict: classifyVerdict(measuredGb, currentHeadroomGb),
+      };
+    }
+
     if (paramB === null) {
       return {
         name: m.name,
@@ -65,6 +100,8 @@ export async function runCheck(query = 'mlx', deps: CheckDeps = defaultDeps): Pr
         parameterSizeB: null,
         quantizationLevel: m.details.quantization_level || null,
         footprintGb: null,
+        estimateSource: 'estimated',
+        quantKnown: false,
         baselineVerdict: 'unknown',
         currentVerdict: 'unknown',
       };
@@ -76,6 +113,8 @@ export async function runCheck(query = 'mlx', deps: CheckDeps = defaultDeps): Pr
       parameterSizeB: paramB,
       quantizationLevel: estimate.quantUsedForEstimate,
       footprintGb: estimate.estimatedFootprintGb,
+      estimateSource: 'estimated',
+      quantKnown: estimate.quantKnown,
       baselineVerdict: classifyVerdict(estimate.estimatedFootprintGb, baselineHeadroomGb),
       currentVerdict: classifyVerdict(estimate.estimatedFootprintGb, currentHeadroomGb),
     };
@@ -91,6 +130,9 @@ export async function runCheck(query = 'mlx', deps: CheckDeps = defaultDeps): Pr
         parameterSizeB: c.parameterSizeB,
         quantizationLevel: estimate.quantUsedForEstimate,
         footprintGb: estimate.estimatedFootprintGb,
+        // Remote candidates aren't even pulled, so there is nothing to measure.
+        estimateSource: 'estimated',
+        quantKnown: estimate.quantKnown,
         baselineVerdict: classifyVerdict(estimate.estimatedFootprintGb, baselineHeadroomGb),
         currentVerdict: classifyVerdict(estimate.estimatedFootprintGb, currentHeadroomGb),
       };

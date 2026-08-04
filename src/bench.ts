@@ -44,8 +44,14 @@ const defaultDeps: BenchDeps = {
 };
 
 export async function runBench(model: string, deps: BenchDeps = defaultDeps): Promise<BenchResult> {
+  // Ollama normalizes an untagged name to `:latest` in its own API responses, so
+  // matching what the user typed against those responses needs the same normalization.
+  // Only the *matching* is normalized: pull/generate/unload still get the raw input,
+  // which Ollama resolves itself.
+  const target = model.includes(':') ? model : `${model}:latest`;
+
   const tags = await deps.fetchTags();
-  const alreadyPulled = tags.models.some((m) => m.name === model);
+  const alreadyPulled = tags.models.some((m) => m.name === target || m.model === target);
   if (!alreadyPulled) {
     await deps.pullModel(model);
   }
@@ -63,7 +69,7 @@ export async function runBench(model: string, deps: BenchDeps = defaultDeps): Pr
   try {
     response = await deps.generate(model, BENCH_PROMPT, GENERATE_TIMEOUT_MS);
     const ps = await deps.fetchPs();
-    running = ps.models.find((m) => m.name === model);
+    running = ps.models.find((m) => m.name === target || m.model === target);
     memoryAfter = deps.readSystemMemory();
   } finally {
     await deps.unloadModel(model);
@@ -94,8 +100,8 @@ export async function runBench(model: string, deps: BenchDeps = defaultDeps): Pr
     status: 'completed',
     sizeVramGb,
     evalTokensPerSecond,
-    loadDurationSeconds: response.load_duration ? response.load_duration / 1e9 : null,
-    totalDurationSeconds: response.total_duration ? response.total_duration / 1e9 : null,
+    loadDurationSeconds: response.load_duration != null ? response.load_duration / 1e9 : null,
+    totalDurationSeconds: response.total_duration != null ? response.total_duration / 1e9 : null,
     memoryBefore,
     memoryAfter,
   };

@@ -129,6 +129,51 @@ describe('runBench', () => {
     expect(unloadCalled).toBe(true);
   });
 
+  it('matches an untagged model name against Ollama\'s :latest-normalized responses', async () => {
+    // `ollama-scope bench llama3.2` is the natural invocation, but Ollama reports the
+    // model as llama3.2:latest — exact-matching the raw input drops the VRAM reading
+    // and triggers a needless re-pull.
+    const tags: OllamaTagsResponse = {
+      models: [{ name: 'llama3.2:latest', model: 'llama3.2:latest', modified_at: '', size: 1, digest: '', details: { parent_model: '', format: 'gguf', family: 'llama', families: null, parameter_size: '3.2B', quantization_level: 'Q4_K_M' }, capabilities: [] }],
+    };
+    const ps: OllamaPsResponse = {
+      models: [{ name: 'llama3.2:latest', model: 'llama3.2:latest', size: 2019393189, digest: '', details: { parent_model: '', format: 'gguf', family: 'llama', families: null, parameter_size: '3.2B', quantization_level: 'Q4_K_M' }, expires_at: '', size_vram: 2019393189, context_length: 4096 }],
+    };
+    const generateResponse: OllamaGenerateResponse = {
+      model: 'llama3.2:latest',
+      created_at: '',
+      response: 'a story',
+      done: true,
+      eval_count: 3,
+      eval_duration: 52_821_000,
+      load_duration: 0,
+      total_duration: 1_838_357_583,
+    };
+
+    let pullCalled = false;
+    const generatedWith: string[] = [];
+
+    const result = await runBench('llama3.2', {
+      fetchTags: async () => tags,
+      fetchPs: async () => ps,
+      generate: async (m) => {
+        generatedWith.push(m);
+        return generateResponse;
+      },
+      unloadModel: async () => {},
+      pullModel: async () => {
+        pullCalled = true;
+      },
+      readSystemMemory: () => before,
+    });
+
+    expect(pullCalled).toBe(false); // already pulled as :latest
+    expect(result.sizeVramGb).toBeCloseTo(2.02, 2);
+    expect(generatedWith).toEqual(['llama3.2']); // raw input passed through to Ollama
+    // a real 0 load_duration is a number, not "missing"
+    expect(result.loadDurationSeconds).toBe(0);
+  });
+
   it('pulls the model when not already present', async () => {
     const emptyTags: OllamaTagsResponse = { models: [] };
     const ps: OllamaPsResponse = { models: [] };
