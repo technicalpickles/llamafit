@@ -66,7 +66,7 @@ describe('runBench', () => {
     expect(pullCalled).toBe(false); // already pulled, should not re-pull
   });
 
-  it('reports timed-out status when generate returns null', async () => {
+  it('reports timed-out status when generate returns null, and still unloads the model', async () => {
     const tags: OllamaTagsResponse = {
       models: [{ name: 'gemma3:27b', model: 'gemma3:27b', modified_at: '', size: 1, digest: '', details: { parent_model: '', format: 'gguf', family: 'gemma3', families: null, parameter_size: '27.4B', quantization_level: 'Q4_K_M' }, capabilities: [] }],
     };
@@ -74,11 +74,15 @@ describe('runBench', () => {
       models: [{ name: 'gemma3:27b', model: 'gemma3:27b', size: 18534629372, digest: '', details: { parent_model: '', format: 'gguf', family: 'gemma3', families: null, parameter_size: '27.4B', quantization_level: 'Q4_K_M' }, expires_at: '', size_vram: 16908340427, context_length: 4096 }],
     };
 
+    let unloadCalled = false;
+
     const result = await runBench('gemma3:27b', {
       fetchTags: async () => tags,
       fetchPs: async () => ps,
       generate: async () => null,
-      unloadModel: async () => {},
+      unloadModel: async () => {
+        unloadCalled = true;
+      },
       pullModel: async () => {},
       readSystemMemory: (() => {
         let callCount = 0;
@@ -89,6 +93,40 @@ describe('runBench', () => {
     expect(result.status).toBe('timed-out');
     expect(result.evalTokensPerSecond).toBeNull();
     expect(result.sizeVramGb).toBeCloseTo(16.91, 1);
+    expect(unloadCalled).toBe(true);
+  });
+
+  it('still unloads the model and rethrows when fetchPs throws after a successful generate call', async () => {
+    const tags: OllamaTagsResponse = { models: [] };
+    const generateResponse: OllamaGenerateResponse = {
+      model: 'gemma3:12b',
+      created_at: '',
+      response: 'a story',
+      done: true,
+      eval_count: 166,
+      eval_duration: 10_690_000_000,
+      load_duration: 12_880_000_000,
+      total_duration: 24_060_000_000,
+    };
+
+    let unloadCalled = false;
+
+    await expect(
+      runBench('gemma3:12b', {
+        fetchTags: async () => tags,
+        fetchPs: async () => {
+          throw new Error('ps failed');
+        },
+        generate: async () => generateResponse,
+        unloadModel: async () => {
+          unloadCalled = true;
+        },
+        pullModel: async () => {},
+        readSystemMemory: () => before,
+      })
+    ).rejects.toThrow('ps failed');
+
+    expect(unloadCalled).toBe(true);
   });
 
   it('pulls the model when not already present', async () => {

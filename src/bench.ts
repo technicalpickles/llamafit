@@ -6,6 +6,7 @@ import {
   pullModel as realPullModel,
   type OllamaTagsResponse,
   type OllamaPsResponse,
+  type OllamaPsModel,
   type OllamaGenerateResponse,
 } from './ollama-client.js';
 import { readSystemMemory as realReadSystemMemory, type SystemMemoryState } from './system-memory.js';
@@ -50,11 +51,23 @@ export async function runBench(model: string, deps: BenchDeps = defaultDeps): Pr
   }
 
   const memoryBefore = deps.readSystemMemory();
-  const response = await deps.generate(model, BENCH_PROMPT, GENERATE_TIMEOUT_MS);
-  const ps = await deps.fetchPs();
-  const running = ps.models.find((m) => m.name === model);
-  const memoryAfter = deps.readSystemMemory();
-  await deps.unloadModel(model);
+
+  // Once generate() has been called, the model may be resident in VRAM — everything
+  // from here through reading its post-run state must unload it on the way out, even
+  // if generate() itself throws or fetchPs()/readSystemMemory() throw afterward.
+  // Otherwise a failure here leaves the model loaded, silently contaminating the next
+  // benchmark's memory readings.
+  let response: OllamaGenerateResponse | null;
+  let running: OllamaPsModel | undefined;
+  let memoryAfter: SystemMemoryState;
+  try {
+    response = await deps.generate(model, BENCH_PROMPT, GENERATE_TIMEOUT_MS);
+    const ps = await deps.fetchPs();
+    running = ps.models.find((m) => m.name === model);
+    memoryAfter = deps.readSystemMemory();
+  } finally {
+    await deps.unloadModel(model);
+  }
 
   const sizeVramGb = running ? running.size_vram / 1e9 : null;
 
