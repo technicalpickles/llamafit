@@ -1,0 +1,2 @@
+Load Avg: 3.95, 3.15, 2.44 
+PhysMem: 23G used (3910M wired, 9538M compressor), 145M unused.
