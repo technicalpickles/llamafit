@@ -1,0 +1,26 @@
+{
+  "name": "ollama-scope",
+  "version": "0.1.0",
+  "description": "Right-size Ollama models for this machine's memory and quantization",
+  "type": "module",
+  "bin": {
+    "ollama-scope": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
