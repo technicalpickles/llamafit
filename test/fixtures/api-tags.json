@@ -1,0 +1,448 @@
+{
+    "models": [
+        {
+            "name": "cyborgxx101/gemma-4-12b-opus-finetuned-mlx:4bit",
+            "model": "cyborgxx101/gemma-4-12b-opus-finetuned-mlx:4bit",
+            "modified_at": "2026-08-03T18:51:08.957314979-04:00",
+            "size": 7381382727,
+            "digest": "f3852ba5cff645814667f90877bc6bab5bacc91371bf8b9e1bc143bf9eddb7cb",
+            "details": {
+                "parent_model": "",
+                "format": "gguf",
+                "family": "gemma4",
+                "families": [
+                    "gemma4"
+                ],
+                "parameter_size": "11.9B",
+                "quantization_level": "Q4_K_M",
+                "context_length": 131072,
+                "embedding_length": 3840
+            },
+            "capabilities": [
+                "completion",
+                "tools",
+                "thinking"
+            ]
+        },
+        {
+            "name": "gemma3:12b",
+            "model": "gemma3:12b",
+            "modified_at": "2026-08-03T18:11:16.932306767-04:00",
+            "size": 8149190253,
+            "digest": "f4031aab637d1ffa37b42570452ae0e4fad0314754d17ded67322e4b95836f8a",
+            "details": {
+                "parent_model": "",
+                "format": "gguf",
+                "family": "gemma3",
+                "families": [
+                    "gemma3"
+                ],
+                "parameter_size": "12.2B",
+                "quantization_level": "Q4_K_M"
+            },
+            "capabilities": [
+                "completion"
+            ]
+        },
+        {
+            "name": "gemma3:27b",
+            "model": "gemma3:27b",
+            "modified_at": "2026-08-03T17:04:07.874753477-04:00",
+            "size": 17396936941,
+            "digest": "a418f5838eaf7fe2cfe0a3046c8384b68ba43a4435542c942f9db00a5f342203",
+            "details": {
+                "parent_model": "",
+                "format": "gguf",
+                "family": "gemma3",
+                "families": [
+                    "gemma3"
+                ],
+                "parameter_size": "27.4B",
+                "quantization_level": "Q4_K_M"
+            },
+            "capabilities": [
+                "completion"
+            ]
+        },
+        {
+            "name": "llama3.2:3b",
+            "model": "llama3.2:3b",
+            "modified_at": "2026-08-03T15:53:50.411151755-04:00",
+            "size": 2019393189,
+            "digest": "a80c4f17acd55265feec403c7aef86be0c25983ab279d83f3bcd3abbcb5b8b72",
+            "details": {
+                "parent_model": "",
+                "format": "gguf",
+                "family": "llama",
+                "families": [
+                    "llama"
+                ],
+                "parameter_size": "3.2B",
+                "quantization_level": "Q4_K_M",
+                "context_length": 131072,
+                "embedding_length": 3072
+            },
+            "capabilities": [
+                "completion",
+                "tools"
+            ]
+        },
+        {
+            "name": "glm-5.2:cloud",
+            "model": "glm-5.2:cloud",
+            "remote_model": "glm-5.2",
+            "remote_host": "https://ollama.com:443",
+            "modified_at": "2026-07-11T17:45:16.020111046-04:00",
+            "size": 338,
+            "digest": "ce8fd6f94793a6786f6858717b38067feba631861e3b35e8122cb6635004cd4a",
+            "details": {
+                "parent_model": "",
+                "format": "",
+                "family": "glm",
+                "families": [
+                    "glm"
+                ],
+                "parameter_size": "756b",
+                "quantization_level": "",
+                "context_length": 1000000
+            },
+            "capabilities": [
+                "completion",
+                "tools",
+                "thinking"
+            ]
+        },
+        {
+            "name": "mistral-large-3:675b-cloud",
+            "model": "mistral-large-3:675b-cloud",
+            "remote_model": "mistral-large-3:675b",
+            "remote_host": "https://ollama.com:443",
+            "modified_at": "2026-07-04T13:58:04.036569985-04:00",
+            "size": 406,
+            "digest": "3130fd5a5a1eb4b208be74bf0273357c14c3576c6ba8d78f98b960e91919d77b",
+            "details": {
+                "parent_model": "",
+                "format": "",
+                "family": "mistral3",
+                "families": [
+                    "mistral3"
+                ],
+                "parameter_size": "675000000000",
+                "quantization_level": "fp8",
+                "context_length": 262144,
+                "embedding_length": 7168
+            },
+            "capabilities": [
+                "completion",
+                "vision",
+                "tools"
+            ]
+        },
+        {
+            "name": "devstral-small-2:24b-cloud",
+            "model": "devstral-small-2:24b-cloud",
+            "remote_model": "devstral-small-2:24b",
+            "remote_host": "https://ollama.com:443",
+            "modified_at": "2026-07-04T13:58:02.308156795-04:00",
+            "size": 405,
+            "digest": "ec4a591da58a566423941143871ae064fa340786af99c9e189b6f3a7e9c4410c",
+            "details": {
+                "parent_model": "",
+                "format": "",
+                "family": "mistral3",
+                "families": [
+                    "mistral3"
+                ],
+                "parameter_size": "24000000000",
+                "quantization_level": "fp8",
+                "context_length": 262144,
+                "embedding_length": 3072
+            },
+            "capabilities": [
+                "completion",
+                "tools",
+                "vision"
+            ]
+        },
+        {
+            "name": "ministral-3:14b-cloud",
+            "model": "ministral-3:14b-cloud",
+            "remote_model": "ministral-3:14b",
+            "remote_host": "https://ollama.com:443",
+            "modified_at": "2026-07-04T13:58:00.54219829-04:00",
+            "size": 395,
+            "digest": "615c59440878989a94d5c0bc15142900bc507544cbc942f1fd71d285d48f8098",
+            "details": {
+                "parent_model": "",
+                "format": "",
+                "family": "mistral3",
+                "families": [
+                    "mistral3"
+                ],
+                "parameter_size": "14000000000",
+                "quantization_level": "fp8",
+                "context_length": 262144,
+                "embedding_length": 5120
+            },
+            "capabilities": [
+                "completion",
+                "vision",
+                "tools"
+            ]
+        },
+        {
+            "name": "ministral-3:8b-cloud",
+            "model": "ministral-3:8b-cloud",
+            "remote_model": "ministral-3:8b",
+            "remote_host": "https://ollama.com:443",
+            "modified_at": "2026-07-04T13:57:58.699400212-04:00",
+            "size": 392,
+            "digest": "a56a5396dfb9aa05654fb96f6150ed9b261f244a919f4db9c7739966321dfca3",
+            "details": {
+                "parent_model": "",
+                "format": "",
+                "family": "mistral3",
+                "families": [
+                    "mistral3"
+                ],
+                "parameter_size": "8000000000",
+                "quantization_level": "fp8",
+                "context_length": 262144,
+                "embedding_length": 4096
+            },
+            "capabilities": [
+                "completion",
+                "vision",
+                "tools"
+            ]
+        },
+        {
+            "name": "ministral-3:3b-cloud",
+            "model": "ministral-3:3b-cloud",
+            "remote_model": "ministral-3:3b",
+            "remote_host": "https://ollama.com:443",
+            "modified_at": "2026-07-04T13:57:56.977938346-04:00",
+            "size": 392,
+            "digest": "6938c17dead4ec7e300ce461aa99ce1ae1062881bf9fe4bab4ea30ad63ef03cc",
+            "details": {
+                "parent_model": "",
+                "format": "",
+                "family": "mistral3",
+                "families": [
+                    "mistral3"
+                ],
+                "parameter_size": "3000000000",
+                "quantization_level": "fp8",
+                "context_length": 262144,
+                "embedding_length": 4096
+            },
+            "capabilities": [
+                "completion",
+                "vision",
+                "tools"
+            ]
+        },
+        {
+            "name": "gemma3:27b-cloud",
+            "model": "gemma3:27b-cloud",
+            "remote_model": "gemma3:27b",
+            "remote_host": "https://ollama.com:443",
+            "modified_at": "2026-07-04T13:57:55.08246777-04:00",
+            "size": 374,
+            "digest": "9e1580299085d71da0163426ee44e30e873c09326f9737e0013751e78a4ac6c0",
+            "details": {
+                "parent_model": "",
+                "format": "",
+                "family": "gemma3",
+                "families": [
+                    "gemma3"
+                ],
+                "parameter_size": "27000000000",
+                "quantization_level": "bf16",
+                "context_length": 131072,
+                "embedding_length": 5376
+            },
+            "capabilities": [
+                "completion",
+                "vision"
+            ]
+        },
+        {
+            "name": "gemma3:12b-cloud",
+            "model": "gemma3:12b-cloud",
+            "remote_model": "gemma3:12b",
+            "remote_host": "https://ollama.com:443",
+            "modified_at": "2026-07-04T13:57:53.446348126-04:00",
+            "size": 373,
+            "digest": "485e7119a53a51aebeb356a471876b88515fc3359c2f3c43d60686386ecce975",
+            "details": {
+                "parent_model": "",
+                "format": "",
+                "family": "gemma3",
+                "families": [
+                    "gemma3"
+                ],
+                "parameter_size": "12000000000",
+                "quantization_level": "bf16",
+                "context_length": 32768,
+                "embedding_length": 3840
+            },
+            "capabilities": [
+                "completion",
+                "vision"
+            ]
+        },
+        {
+            "name": "gemma3:4b-cloud",
+            "model": "gemma3:4b-cloud",
+            "remote_model": "gemma3:4b",
+            "remote_host": "https://ollama.com:443",
+            "modified_at": "2026-07-04T13:57:51.757255112-04:00",
+            "size": 370,
+            "digest": "89c58fea54206bf968b98f99e7b5ed496bc9e992d19bce1b0af077072bb684a6",
+            "details": {
+                "parent_model": "",
+                "format": "",
+                "family": "gemma3",
+                "families": [
+                    "gemma3"
+                ],
+                "parameter_size": "4000000000",
+                "quantization_level": "bf16",
+                "context_length": 32768,
+                "embedding_length": 2560
+            },
+            "capabilities": [
+                "completion",
+                "vision"
+            ]
+        },
+        {
+            "name": "minimax-m3:cloud",
+            "model": "minimax-m3:cloud",
+            "remote_model": "minimax-m3",
+            "remote_host": "https://ollama.com:443",
+            "modified_at": "2026-07-04T13:45:07.195166305-04:00",
+            "size": 362,
+            "digest": "d03a959f45c04ab183e245922ecb46ebccfb9d5e55bdee5e9055271ee70195e3",
+            "details": {
+                "parent_model": "",
+                "format": "",
+                "family": "minimax-m3",
+                "families": [
+                    "minimax-m3"
+                ],
+                "parameter_size": "",
+                "quantization_level": "",
+                "context_length": 524288
+            },
+            "capabilities": [
+                "completion",
+                "tools",
+                "thinking",
+                "vision"
+            ]
+        },
+        {
+            "name": "gemma4:cloud",
+            "model": "gemma4:cloud",
+            "remote_model": "gemma4:31b",
+            "remote_host": "https://ollama.com:443",
+            "modified_at": "2026-07-04T13:45:05.178614514-04:00",
+            "size": 387,
+            "digest": "b06ba4be71c0f9262de78db5cba82ae543939d9f2022a1257a048b69f7861092",
+            "details": {
+                "parent_model": "",
+                "format": "",
+                "family": "gemma4",
+                "families": [
+                    "gemma4"
+                ],
+                "parameter_size": "32.7b",
+                "quantization_level": "bf16",
+                "context_length": 262144,
+                "embedding_length": 5376
+            },
+            "capabilities": [
+                "completion",
+                "thinking",
+                "tools",
+                "vision"
+            ]
+        },
+        {
+            "name": "gemini-3-flash-preview:cloud",
+            "model": "gemini-3-flash-preview:cloud",
+            "remote_model": "gemini-3-flash-preview",
+            "remote_host": "https://ollama.com:443",
+            "modified_at": "2026-07-04T13:45:03.554276829-04:00",
+            "size": 367,
+            "digest": "ebade0d316903752e67a73245aa10f4e1061b2fa42c0503bfc3569e5c7e8ec7b",
+            "details": {
+                "parent_model": "",
+                "format": "",
+                "family": "",
+                "families": null,
+                "parameter_size": "",
+                "quantization_level": "",
+                "context_length": 1048576
+            },
+            "capabilities": [
+                "completion",
+                "vision",
+                "tools",
+                "thinking"
+            ]
+        },
+        {
+            "name": "qwen3.5:cloud",
+            "model": "qwen3.5:cloud",
+            "remote_model": "qwen3.5:397b",
+            "remote_host": "https://ollama.com:443",
+            "modified_at": "2026-07-03T16:22:40.263891881-04:00",
+            "size": 346,
+            "digest": "a7bf6f7891c3c5189353c5e330f57563991f5cceabbe830c941619f24dc4dbca",
+            "details": {
+                "parent_model": "",
+                "format": "",
+                "family": "",
+                "families": null,
+                "parameter_size": "",
+                "quantization_level": "",
+                "context_length": 262144
+            },
+            "capabilities": [
+                "completion",
+                "tools",
+                "thinking",
+                "vision"
+            ]
+        },
+        {
+            "name": "gpt-oss:20b-cloud",
+            "model": "gpt-oss:20b-cloud",
+            "remote_model": "gpt-oss:20b",
+            "remote_host": "https://ollama.com:443",
+            "modified_at": "2026-07-03T16:21:41.138234302-04:00",
+            "size": 381,
+            "digest": "875e8e3a629ad3c2e66f1f1c461e3d140474212f44a34f4687ae1d927db41690",
+            "details": {
+                "parent_model": "",
+                "format": "",
+                "family": "gptoss",
+                "families": [
+                    "gptoss"
+                ],
+                "parameter_size": "20.9B",
+                "quantization_level": "MXFP4",
+                "context_length": 131072,
+                "embedding_length": 2880
+            },
+            "capabilities": [
+                "completion",
+                "tools",
+                "thinking"
+            ]
+        }
+    ]
+}
