@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { formatCheckTable, formatCheckJson } from '../src/format.js';
 import type { CheckResult } from '../src/check.js';
+import { formatBenchResult } from '../src/format.js';
+import type { BenchResult } from '../src/bench.js';
 
 const sampleResult: CheckResult = {
   rows: [
@@ -55,5 +57,61 @@ describe('formatCheckJson', () => {
     const json = formatCheckJson(sampleResult);
     const parsed = JSON.parse(json);
     expect(parsed.rows[0].name).toBe('gemma3:12b');
+  });
+});
+
+describe('formatBenchResult', () => {
+  const memoryBefore = {
+    totalGb: 24, usedGb: 3, wiredGb: 3, compressorGb: 6, unusedGb: 15,
+    swapTotalGb: 0, swapUsedGb: 0, swapFreeGb: 0,
+  };
+  const memoryAfter = { ...memoryBefore, usedGb: 23, unusedGb: 0.1, swapUsedGb: 22.6 };
+
+  it('reports tokens/sec and durations for a completed run', () => {
+    const result: BenchResult = {
+      model: 'gemma3:12b',
+      status: 'completed',
+      sizeVramGb: 8.64,
+      evalTokensPerSecond: 15.5,
+      loadDurationSeconds: 12.88,
+      totalDurationSeconds: 24.06,
+      memoryBefore,
+      memoryAfter,
+    };
+    const output = formatBenchResult(result);
+    expect(output).toContain('gemma3:12b');
+    expect(output).toContain('15.5');
+    expect(output).toContain('completed');
+  });
+
+  it('reports a plain-language timeout message without fabricating numbers', () => {
+    const result: BenchResult = {
+      model: 'gemma3:27b',
+      status: 'timed-out',
+      sizeVramGb: 16.91,
+      evalTokensPerSecond: null,
+      loadDurationSeconds: null,
+      totalDurationSeconds: null,
+      memoryBefore,
+      memoryAfter,
+    };
+    const output = formatBenchResult(result);
+    expect(output).toContain('timed-out');
+    expect(output.toLowerCase()).toContain('swap');
+  });
+
+  it('shows the swap delta between before and after', () => {
+    const result: BenchResult = {
+      model: 'gemma3:27b',
+      status: 'timed-out',
+      sizeVramGb: 16.91,
+      evalTokensPerSecond: null,
+      loadDurationSeconds: null,
+      totalDurationSeconds: null,
+      memoryBefore,
+      memoryAfter,
+    };
+    const output = formatBenchResult(result);
+    expect(output).toContain('22.6');
   });
 });

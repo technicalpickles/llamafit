@@ -1,0 +1,89 @@
+import {
+  fetchTags as realFetchTags,
+  fetchPs as realFetchPs,
+  generate as realGenerate,
+  unloadModel as realUnloadModel,
+  pullModel as realPullModel,
+  type OllamaTagsResponse,
+  type OllamaPsResponse,
+  type OllamaGenerateResponse,
+} from './ollama-client.js';
+import { readSystemMemory as realReadSystemMemory, type SystemMemoryState } from './system-memory.js';
+
+const BENCH_PROMPT = 'Write a 150 word short story about a robot learning to paint.';
+const GENERATE_TIMEOUT_MS = 90_000;
+
+export interface BenchResult {
+  model: string;
+  status: 'completed' | 'timed-out';
+  sizeVramGb: number | null;
+  evalTokensPerSecond: number | null;
+  loadDurationSeconds: number | null;
+  totalDurationSeconds: number | null;
+  memoryBefore: SystemMemoryState;
+  memoryAfter: SystemMemoryState;
+}
+
+export interface BenchDeps {
+  fetchTags: () => Promise<OllamaTagsResponse>;
+  fetchPs: () => Promise<OllamaPsResponse>;
+  generate: (model: string, prompt: string, timeoutMs?: number) => Promise<OllamaGenerateResponse | null>;
+  unloadModel: (model: string) => Promise<void>;
+  pullModel: (model: string) => Promise<void>;
+  readSystemMemory: () => SystemMemoryState;
+}
+
+const defaultDeps: BenchDeps = {
+  fetchTags: realFetchTags,
+  fetchPs: realFetchPs,
+  generate: realGenerate,
+  unloadModel: realUnloadModel,
+  pullModel: realPullModel,
+  readSystemMemory: realReadSystemMemory,
+};
+
+export async function runBench(model: string, deps: BenchDeps = defaultDeps): Promise<BenchResult> {
+  const tags = await deps.fetchTags();
+  const alreadyPulled = tags.models.some((m) => m.name === model);
+  if (!alreadyPulled) {
+    await deps.pullModel(model);
+  }
+
+  const memoryBefore = deps.readSystemMemory();
+  const response = await deps.generate(model, BENCH_PROMPT, GENERATE_TIMEOUT_MS);
+  const ps = await deps.fetchPs();
+  const running = ps.models.find((m) => m.name === model);
+  const memoryAfter = deps.readSystemMemory();
+  await deps.unloadModel(model);
+
+  const sizeVramGb = running ? running.size_vram / 1e9 : null;
+
+  if (response === null) {
+    return {
+      model,
+      status: 'timed-out',
+      sizeVramGb,
+      evalTokensPerSecond: null,
+      loadDurationSeconds: null,
+      totalDurationSeconds: null,
+      memoryBefore,
+      memoryAfter,
+    };
+  }
+
+  const evalTokensPerSecond =
+    response.eval_count && response.eval_duration
+      ? response.eval_count / (response.eval_duration / 1e9)
+      : null;
+
+  return {
+    model,
+    status: 'completed',
+    sizeVramGb,
+    evalTokensPerSecond,
+    loadDurationSeconds: response.load_duration ? response.load_duration / 1e9 : null,
+    totalDurationSeconds: response.total_duration ? response.total_duration / 1e9 : null,
+    memoryBefore,
+    memoryAfter,
+  };
+}

@@ -1,5 +1,6 @@
 import { MACOS_BASELINE_RESERVE_GB } from './estimate.js';
 import type { CheckResult } from './check.js';
+import type { BenchResult } from './bench.js';
 
 export function formatCheckTable(result: CheckResult): string {
   const header = ['MODEL', 'SOURCE', 'PARAMS(B)', 'QUANT', 'EST FOOTPRINT(GB)', 'BASELINE', 'CURRENT'];
@@ -36,4 +37,26 @@ export function formatCheckTable(result: CheckResult): string {
 
 export function formatCheckJson(result: CheckResult): string {
   return JSON.stringify(result, null, 2);
+}
+
+export function formatBenchResult(result: BenchResult): string {
+  const lines: string[] = [];
+  lines.push(`Model: ${result.model}`);
+  lines.push(`Status: ${result.status}`);
+  if (result.sizeVramGb !== null) {
+    lines.push(`VRAM: ${result.sizeVramGb.toFixed(2)}GB`);
+  }
+  if (result.status === 'completed') {
+    lines.push(`Load duration: ${result.loadDurationSeconds?.toFixed(2)}s`);
+    lines.push(`Tokens/sec: ${result.evalTokensPerSecond?.toFixed(1)}`);
+    lines.push(`Total duration: ${result.totalDurationSeconds?.toFixed(2)}s`);
+  } else {
+    lines.push('Did not complete within timeout — likely heavy swap contention.');
+  }
+  const swapDeltaGb = result.memoryAfter.swapUsedGb - result.memoryBefore.swapUsedGb;
+  lines.push(
+    `Swap used: ${result.memoryBefore.swapUsedGb.toFixed(1)}GB -> ${result.memoryAfter.swapUsedGb.toFixed(1)}GB ` +
+      `(Δ ${swapDeltaGb >= 0 ? '+' : ''}${swapDeltaGb.toFixed(1)}GB)`
+  );
+  return lines.join('\n');
 }
