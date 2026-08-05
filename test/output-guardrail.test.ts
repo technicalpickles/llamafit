@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { runCheck } from '../src/check.js';
 import { formatCheckTable, formatCheckJson, formatBenchResult } from '../src/format.js';
 import type { BenchResult } from '../src/bench.js';
-import type { OllamaTagsResponse, OllamaPsResponse } from '../src/ollama-client.js';
+import type { OllamaTagsResponse, OllamaPsResponse } from '../src/backends/ollama/client.js';
 import type { SystemMemoryState } from '../src/probes/types.js';
 
 function loadFixture<T>(name: string): T {
@@ -26,7 +26,7 @@ const deps = {
   fetchPs: async () => loadFixture<OllamaPsResponse>('api-ps-loaded.json'),
   readSystemMemory: async () => SYSTEM,
   scrapeSearch: async (_query: string) => {
-    const { parseSearchResults } = await import('../src/scrape.js');
+    const { parseSearchResults } = await import('../src/backends/ollama/scrape.js');
     return parseSearchResults(
       readFileSync(new URL('./fixtures/ollama-search-mlx.html', import.meta.url), 'utf8')
     );

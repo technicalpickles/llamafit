@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { runBench } from '../src/bench.js';
-import type { OllamaTagsResponse, OllamaPsResponse, OllamaGenerateResponse } from '../src/ollama-client.js';
+import type { OllamaTagsResponse, OllamaPsResponse, OllamaGenerateResponse } from '../src/backends/ollama/client.js';
 import type { SystemMemoryState } from '../src/probes/types.js';
 
 const before: SystemMemoryState = {

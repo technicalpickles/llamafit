@@ -1,7 +1,7 @@
 import { loadThresholds } from './data.js';
 import type { CheckResult } from './check.js';
 import type { BenchResult } from './bench.js';
-import { modelPageUrl } from './ollama-client.js';
+import { modelPageUrl } from './backends/ollama/client.js';
 import { colorizeVerdict, colorizeBenchStatus, label, dim } from './colors.js';
 
 export interface FormatOptions {

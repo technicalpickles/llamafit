@@ -6,7 +6,7 @@ import {
   modelPageUrl,
   fetchTags,
   type OllamaTagsResponse,
-} from '../src/ollama-client.js';
+} from '../src/backends/ollama/client.js';
 
 function loadFixture<T>(name: string): T {
   return JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf-8'));

@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { runCheck } from '../src/check.js';
-import type { OllamaTagsResponse, OllamaPsResponse } from '../src/ollama-client.js';
+import type { OllamaTagsResponse, OllamaPsResponse } from '../src/backends/ollama/client.js';
 import type { SystemMemoryState } from '../src/probes/types.js';
-import type { RemoteModelCandidate } from '../src/scrape.js';
+import type { RemoteModelCandidate } from '../src/backends/ollama/scrape.js';
 
 function loadFixture<T>(name: string): T {
   return JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf-8'));

@@ -6,13 +6,13 @@ import {
   type OllamaTagsResponse,
   type OllamaPsResponse,
   type OllamaPsModel,
-} from './ollama-client.js';
+} from './backends/ollama/client.js';
 import { selectProbe } from './probes/registry.js';
 import type { SystemMemoryState } from './probes/types.js';
 import { formulaEstimator, classifyVerdict } from './estimators/formula.js';
 import type { Verdict } from './estimators/types.js';
 import { loadThresholds } from './data.js';
-import { scrapeSearch as realScrapeSearch, type RemoteModelCandidate } from './scrape.js';
+import { scrapeSearch as realScrapeSearch, type RemoteModelCandidate } from './backends/ollama/scrape.js';
 
 export interface CheckRow {
   name: string;

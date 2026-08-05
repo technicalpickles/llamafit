@@ -12,7 +12,7 @@ import {
   pullModel as rawPullModel,
   parseParameterSize,
   type OllamaTagsModel,
-} from './ollama-client.js';
+} from './backends/ollama/client.js';
 import { selectProbe } from './probes/registry.js';
 import { formatCheckTable, formatCheckJson, formatBenchResult } from './format.js';
 import { shouldUseColor, success, warn, error, info, label } from './colors.js';

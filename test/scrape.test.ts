@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { parseSearchResults } from '../src/scrape.js';
+import { parseSearchResults } from '../src/backends/ollama/scrape.js';
 
 function loadFixture(name: string): string {
   return readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf-8');

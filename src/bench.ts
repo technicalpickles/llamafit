@@ -8,7 +8,7 @@ import {
   type OllamaPsResponse,
   type OllamaPsModel,
   type OllamaGenerateResponse,
-} from './ollama-client.js';
+} from './backends/ollama/client.js';
 import { selectProbe } from './probes/registry.js';
 import type { SystemMemoryState } from './probes/types.js';
 
