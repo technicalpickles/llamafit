@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "description": "Right-size Ollama models for this machine's memory and quantization",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/technicalpickles/llmfit"
+  },
   "bin": {
     "ollama-scope": "./dist/cli.js"
   },
