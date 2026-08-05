@@ -92,8 +92,20 @@ describe('runCheck', () => {
   it('includes remote candidates with a parsed size, using the unknown-quant fallback', async () => {
     const tags = loadFixture<OllamaTagsResponse>('api-tags.json');
     const remote: RemoteModelCandidate[] = [
-      { name: 'pd95/gptoss-mlx', description: '', parameterSizeB: 20, sizeSource: 'badge' },
-      { name: 'mistral-large-3', description: '', parameterSizeB: null, sizeSource: 'unknown' },
+      {
+        name: 'pd95/gptoss-mlx',
+        url: 'https://ollama.com/pd95/gptoss-mlx',
+        description: '',
+        parameterSizeB: 20,
+        sizeSource: 'badge',
+      },
+      {
+        name: 'mistral-large-3',
+        url: 'https://ollama.com/library/mistral-large-3',
+        description: '',
+        parameterSizeB: null,
+        sizeSource: 'unknown',
+      },
     ];
     const result = await runCheck('mlx', {
       fetchTags: async () => tags,
@@ -150,7 +162,13 @@ describe('runCheck', () => {
   it('flags a remote row as an estimate built on an unknown quantization', async () => {
     const tags = loadFixture<OllamaTagsResponse>('api-tags.json');
     const remote: RemoteModelCandidate[] = [
-      { name: 'pd95/gptoss-mlx', description: '', parameterSizeB: 20, sizeSource: 'badge' },
+      {
+        name: 'pd95/gptoss-mlx',
+        url: 'https://ollama.com/pd95/gptoss-mlx',
+        description: '',
+        parameterSizeB: 20,
+        sizeSource: 'badge',
+      },
     ];
     const result = await runCheck('mlx', {
       fetchTags: async () => tags,

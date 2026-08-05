@@ -66,6 +66,13 @@ export function isCloudModel(model: OllamaTagsModel): boolean {
   return typeof model.remote_host === 'string' && model.remote_host.length > 0;
 }
 
+/** Official models live at ollama.com/library/<name>; community uploads are namespaced
+ * as ollama.com/<user>/<name>, distinguishable by the presence of a `/` in the name. */
+export function modelPageUrl(name: string): string {
+  const base = name.includes(':') ? name.slice(0, name.lastIndexOf(':')) : name;
+  return base.includes('/') ? `https://ollama.com/${base}` : `https://ollama.com/library/${base}`;
+}
+
 /** Returns billions of parameters, or null if unparseable/empty. */
 export function parseParameterSize(raw: string): number | null {
   const trimmed = raw.trim();

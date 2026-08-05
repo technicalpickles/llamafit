@@ -19,6 +19,7 @@ describe('parseSearchResults', () => {
     expect(mxbai).toBeDefined();
     expect(mxbai!.parameterSizeB).toBeCloseTo(0.335, 5);
     expect(mxbai!.sizeSource).toBe('badge');
+    expect(mxbai!.url).toBe('https://ollama.com/library/mxbai-embed-large');
   });
 
   it('parses a size badge in whole billions', () => {
@@ -26,6 +27,7 @@ describe('parseSearchResults', () => {
     expect(gptoss).toBeDefined();
     expect(gptoss!.parameterSizeB).toBe(20);
     expect(gptoss!.sizeSource).toBe('badge');
+    expect(gptoss!.url).toBe('https://ollama.com/pd95/gptoss-mlx');
   });
 
   it('falls back to name-heuristic parsing when there is no size badge', () => {

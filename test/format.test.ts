@@ -9,6 +9,7 @@ const sampleResult: CheckResult = {
     {
       name: 'gemma3:12b',
       source: 'local',
+      url: null,
       parameterSizeB: 12.2,
       quantizationLevel: 'Q4_K_M',
       footprintGb: 8.58,
@@ -60,6 +61,7 @@ describe('formatCheckTable', () => {
         {
           name: 'pd95/gptoss-mlx',
           source: 'remote',
+          url: 'https://ollama.com/pd95/gptoss-mlx',
           parameterSizeB: 20,
           quantizationLevel: 'Q4_K_M',
           footprintGb: 14.06,
@@ -76,6 +78,31 @@ describe('formatCheckTable', () => {
     expect(table).toContain('quantization not reported');
   });
 
+  it('lists a link for each remote candidate, so an unfamiliar model is one click away', () => {
+    const table = formatCheckTable({
+      ...sampleResult,
+      rows: [
+        ...sampleResult.rows,
+        {
+          name: 'pd95/gptoss-mlx',
+          source: 'remote',
+          url: 'https://ollama.com/pd95/gptoss-mlx',
+          parameterSizeB: 20,
+          quantizationLevel: 'Q4_K_M',
+          footprintGb: 14.06,
+          estimateSource: 'estimated',
+          quantKnown: false,
+          baselineVerdict: 'will-thrash',
+          currentVerdict: 'will-thrash',
+        },
+      ],
+    });
+    expect(table).toContain('pd95/gptoss-mlx');
+    expect(table).toContain('https://ollama.com/pd95/gptoss-mlx');
+    // the local row shouldn't get a spurious link line
+    expect(table.split('\n').filter((l) => l.includes('ollama.com')).length).toBe(1);
+  });
+
   it('shows a measured footprint bare, with no estimate marker', () => {
     const table = formatCheckTable({
       ...sampleResult,
@@ -83,6 +110,7 @@ describe('formatCheckTable', () => {
         {
           name: 'gemma3:12b',
           source: 'local',
+          url: null,
           parameterSizeB: 12.2,
           quantizationLevel: 'Q4_K_M',
           footprintGb: 8.643862854,
@@ -107,6 +135,29 @@ describe('formatCheckJson', () => {
     expect(parsed.rows[0].name).toBe('gemma3:12b');
   });
 });
+
+describe('formatCheckTable color', () => {
+  it('omits ANSI escape codes by default', () => {
+    const table = formatCheckTable(sampleResult);
+    expect(table).not.toContain('\x1b[');
+  });
+
+  it('colors verdicts without breaking column alignment when color is enabled', () => {
+    const table = formatCheckTable(sampleResult, { color: true });
+    expect(table).toContain('\x1b[');
+    expect(table).toContain('comfortable');
+    expect(table).toContain('will-thrash');
+    // Every data row and the header should still line up to the same visible width.
+    const dataLine = table.split('\n').find((l) => l.startsWith('gemma3:12b'))!;
+    const headerLine = table.split('\n')[0];
+    expect(stripAnsi(dataLine).indexOf('comfortable')).toBe(stripAnsi(headerLine).indexOf('BASELINE'));
+  });
+});
+
+function stripAnsi(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/\x1b\[[0-9;]*m/g, '');
+}
 
 describe('formatBenchResult', () => {
   const memoryBefore = {

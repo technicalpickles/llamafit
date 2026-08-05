@@ -12,7 +12,15 @@ import {
 import { readSystemMemory as realReadSystemMemory, type SystemMemoryState } from './system-memory.js';
 
 const BENCH_PROMPT = 'Write a 150 word short story about a robot learning to paint.';
-const GENERATE_TIMEOUT_MS = 90_000;
+export const GENERATE_TIMEOUT_MS = 90_000;
+
+/** Ollama normalizes an untagged name to `:latest` in its own API responses, so
+ * matching what the user typed against those responses needs the same normalization.
+ * Only the *matching* is normalized: pull/generate/unload still get the raw input,
+ * which Ollama resolves itself. */
+export function normalizeModelTarget(model: string): string {
+  return model.includes(':') ? model : `${model}:latest`;
+}
 
 export interface BenchResult {
   model: string;
@@ -44,11 +52,7 @@ const defaultDeps: BenchDeps = {
 };
 
 export async function runBench(model: string, deps: BenchDeps = defaultDeps): Promise<BenchResult> {
-  // Ollama normalizes an untagged name to `:latest` in its own API responses, so
-  // matching what the user typed against those responses needs the same normalization.
-  // Only the *matching* is normalized: pull/generate/unload still get the raw input,
-  // which Ollama resolves itself.
-  const target = model.includes(':') ? model : `${model}:latest`;
+  const target = normalizeModelTarget(model);
 
   const tags = await deps.fetchTags();
   const alreadyPulled = tags.models.some((m) => m.name === target || m.model === target);

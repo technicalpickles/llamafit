@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import {
   isCloudModel,
   parseParameterSize,
+  modelPageUrl,
   fetchTags,
   type OllamaTagsResponse,
 } from '../src/ollama-client.js';
@@ -30,6 +31,22 @@ describe('parseParameterSize', () => {
 
   it('returns null for an empty string', () => {
     expect(parseParameterSize('')).toBeNull();
+  });
+});
+
+describe('modelPageUrl', () => {
+  it('links an official model to its library page, stripping the tag', () => {
+    expect(modelPageUrl('gemma3:12b')).toBe('https://ollama.com/library/gemma3');
+  });
+
+  it('links an untagged official model to its library page', () => {
+    expect(modelPageUrl('gemma3')).toBe('https://ollama.com/library/gemma3');
+  });
+
+  it('links a community-namespaced model to its user page, stripping the tag', () => {
+    expect(modelPageUrl('cyborgxx101/gemma-4-12b-opus-finetuned-mlx:4bit')).toBe(
+      'https://ollama.com/cyborgxx101/gemma-4-12b-opus-finetuned-mlx'
+    );
   });
 });
 

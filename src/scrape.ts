@@ -2,6 +2,7 @@ import * as cheerio from 'cheerio';
 
 export interface RemoteModelCandidate {
   name: string;
+  url: string;
   description: string;
   parameterSizeB: number | null;
   sizeSource: 'badge' | 'name-heuristic' | 'unknown';
@@ -28,18 +29,20 @@ export function parseSearchResults(html: string): RemoteModelCandidate[] {
     if (!href) return;
 
     const name = href.startsWith('/library/') ? href.slice('/library/'.length) : href.slice(1);
+    const url = `https://ollama.com${href}`;
     const description = $(el).find('p.max-w-lg').first().text().trim();
     const badgeText = $(el).find('span.text-blue-600').first().text().trim();
     const badgeSize = badgeText.length > 0 ? parseSizeBadgeText(badgeText) : null;
 
     if (badgeSize !== null) {
-      results.push({ name, description, parameterSizeB: badgeSize, sizeSource: 'badge' });
+      results.push({ name, url, description, parameterSizeB: badgeSize, sizeSource: 'badge' });
       return;
     }
 
     const nameSize = parseSizeFromName(name);
     results.push({
       name,
+      url,
       description,
       parameterSizeB: nameSize,
       sizeSource: nameSize !== null ? 'name-heuristic' : 'unknown',

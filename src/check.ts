@@ -14,6 +14,8 @@ import { scrapeSearch as realScrapeSearch, type RemoteModelCandidate } from './s
 export interface CheckRow {
   name: string;
   source: 'local' | 'remote';
+  /** Only set for remote rows — the ollama.com page for a model the user hasn't tried yet. */
+  url: string | null;
   parameterSizeB: number | null;
   quantizationLevel: string | null;
   footprintGb: number | null;
@@ -83,6 +85,7 @@ export async function runCheck(query = 'mlx', deps: CheckDeps = defaultDeps): Pr
       return {
         name: m.name,
         source: 'local',
+        url: null,
         parameterSizeB: paramB,
         quantizationLevel: loaded.details.quantization_level || null,
         footprintGb: measuredGb,
@@ -97,6 +100,7 @@ export async function runCheck(query = 'mlx', deps: CheckDeps = defaultDeps): Pr
       return {
         name: m.name,
         source: 'local',
+        url: null,
         parameterSizeB: null,
         quantizationLevel: m.details.quantization_level || null,
         footprintGb: null,
@@ -110,6 +114,7 @@ export async function runCheck(query = 'mlx', deps: CheckDeps = defaultDeps): Pr
     return {
       name: m.name,
       source: 'local',
+      url: null,
       parameterSizeB: paramB,
       quantizationLevel: estimate.quantUsedForEstimate,
       footprintGb: estimate.estimatedFootprintGb,
@@ -127,6 +132,7 @@ export async function runCheck(query = 'mlx', deps: CheckDeps = defaultDeps): Pr
       return {
         name: c.name,
         source: 'remote',
+        url: c.url,
         parameterSizeB: c.parameterSizeB,
         quantizationLevel: estimate.quantUsedForEstimate,
         footprintGb: estimate.estimatedFootprintGb,
