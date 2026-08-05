@@ -1,0 +1,14 @@
+{
+  "fallback": "Q4_K_M",
+  "entries": [
+    { "id": "F32", "bytesPerParam": 4.0, "aliases": ["FP32"] },
+    { "id": "F16", "bytesPerParam": 2.0, "aliases": ["BF16", "FP16"] },
+    { "id": "Q8_0", "bytesPerParam": 1.0, "aliases": ["FP8"] },
+    { "id": "Q6_K", "bytesPerParam": 0.75, "aliases": [] },
+    { "id": "Q5_K_M", "bytesPerParam": 0.69, "aliases": [] },
+    { "id": "Q4_K_M", "bytesPerParam": 0.5625, "aliases": [] },
+    { "id": "Q4_0", "bytesPerParam": 0.5, "aliases": ["MXFP4", "NVFP4"] },
+    { "id": "Q3_K_M", "bytesPerParam": 0.44, "aliases": [] },
+    { "id": "Q2_K", "bytesPerParam": 0.35, "aliases": [] }
+  ]
+}

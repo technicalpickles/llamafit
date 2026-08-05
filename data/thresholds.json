@@ -1,0 +1,5 @@
+{
+  "tightRatio": 0.7,
+  "thrashRatio": 0.95,
+  "baselineReserveGb": { "darwin": 8 }
+}

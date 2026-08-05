@@ -1,0 +1,9 @@
+{
+  "overheadMultiplier": 1.25,
+  "provenance": [
+    { "backend": "ollama", "model": "llama3.2:3b", "predictedWeightsGb": 1.8, "measuredVramGb": 2.3 },
+    { "backend": "ollama", "model": "gemma3:12b", "predictedWeightsGb": 6.75, "measuredVramGb": 8.6 },
+    { "backend": "ollama", "model": "gemma-4-12b-mlx:4bit", "predictedWeightsGb": 6.69, "measuredVramGb": 7.8 }
+  ],
+  "backends": {}
+}
