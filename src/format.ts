@@ -2,7 +2,7 @@ import { loadThresholds } from './data.js';
 import type { CheckResult } from './check.js';
 import type { BenchResult } from './bench.js';
 import { modelPageUrl } from './backends/ollama/client.js';
-import { colorizeVerdict, colorizeBenchStatus, label, dim } from './colors.js';
+import { colorizeVerdict, colorizeBenchStatus, label, dim, warn } from './colors.js';
 
 export interface FormatOptions {
   color?: boolean;
@@ -117,5 +117,13 @@ export function formatBenchResult(result: BenchResult, opts: FormatOptions = {})
     `${label('Swap used:', color)} ${result.memoryBefore.swapUsedGb.toFixed(1)}GB -> ${result.memoryAfter.swapUsedGb.toFixed(1)}GB ` +
       `(Δ ${swapDeltaGb >= 0 ? '+' : ''}${swapDeltaGb.toFixed(1)}GB)`
   );
+
+  if (result.notes.length > 0) {
+    lines.push('');
+    for (const note of result.notes) {
+      lines.push(warn(note, color));
+    }
+  }
+
   return lines.join('\n');
 }

@@ -36,6 +36,7 @@ const BENCH: BenchResult = {
   totalDurationSeconds: 18.9,
   memoryBefore: SYSTEM,
   memoryAfter: { ...SYSTEM, usedGb: 20.1, wiredGb: 3.4, swapUsedGb: 0.9 },
+  notes: [],
 };
 
 describe('output guardrail (must stay byte-identical through the carve-out)', () => {

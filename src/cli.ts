@@ -3,18 +3,11 @@ import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { runCheck } from './check.js';
-import { runBench, normalizeModelTarget, GENERATE_TIMEOUT_MS, type BenchDeps } from './bench.js';
-import {
-  fetchTags,
-  fetchPs,
-  generate as rawGenerate,
-  unloadModel as rawUnloadModel,
-  pullModel as rawPullModel,
-  parseParameterSize,
-  type OllamaTagsModel,
-} from './backends/ollama/client.js';
+import { runBench, normalizeModelTarget, GENERATE_TIMEOUT_MS } from './bench.js';
 import { selectProbe } from './probes/registry.js';
 import { ollamaBackend } from './backends/ollama/index.js';
+import type { Backend } from './backends/types.js';
+import type { ModelInfo } from './types.js';
 import { formulaEstimator } from './estimators/formula.js';
 import { GapCollector } from './gaps.js';
 import { formatCheckTable, formatCheckJson, formatBenchResult } from './format.js';
@@ -24,12 +17,14 @@ import { startSpinner } from './progress.js';
 /** Printed once before any of the slow steps start, so the user knows what's about to
  * happen (and how long the generate step is allowed to run) instead of guessing from a
  * bare model name whether the tool is about to sit idle downloading gigabytes. */
-function describeBenchPlan(model: string, existing: OllamaTagsModel | undefined): string[] {
+function describeBenchPlan(model: string, existing: ModelInfo | undefined): string[] {
   const details = existing
     ? (() => {
-        const paramB = parseParameterSize(existing.details.parameter_size);
-        const params = paramB !== null ? `${paramB.toFixed(1)}B params` : 'params unknown';
-        const quant = existing.details.quantization_level || 'quant unknown';
+        const params =
+          existing.parameterSizeB !== null
+            ? `${existing.parameterSizeB.toFixed(1)}B params`
+            : 'params unknown';
+        const quant = existing.quantizationLevel || 'quant unknown';
         return `${params}, ${quant}, already pulled locally`;
       })()
     : 'not pulled locally yet, will download first';
@@ -42,31 +37,35 @@ function describeBenchPlan(model: string, existing: OllamaTagsModel | undefined)
 }
 
 /** Wraps the slow, silent steps (pull can take minutes; generate can take up to its
- * timeout) with a spinner on stderr, so stdout stays just the final result. */
-function benchDepsWithProgress(color: boolean): BenchDeps {
+ * timeout) with a spinner on stderr, so stdout stays just the final result. Only wraps
+ * the optional pull/unload capabilities when the backend actually has them — passing
+ * everything else (including the always-present generate) through untouched. */
+function withProgress(backend: Backend, color: boolean): Backend {
+  const pull = backend.pull;
+  const unload = backend.unload;
   return {
-    fetchTags,
-    fetchPs,
-    readSystemMemory: () => selectProbe(process.platform)!.read(),
-    pullModel: async (model) => {
-      const startedAt = Date.now();
-      const spinner = startSpinner(`Pulling ${model}...`);
-      try {
-        await rawPullModel(model);
-      } catch (err) {
-        spinner.stop();
-        throw err;
-      }
-      const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
-      spinner.stop(success(`Pulled ${model} (${elapsed}s)`, color));
-    },
+    ...backend,
+    pull: pull
+      ? async (model) => {
+          const startedAt = Date.now();
+          const spinner = startSpinner(`Pulling ${model}...`);
+          try {
+            await pull(model);
+          } catch (err) {
+            spinner.stop();
+            throw err;
+          }
+          const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+          spinner.stop(success(`Pulled ${model} (${elapsed}s)`, color));
+        }
+      : undefined,
     generate: async (model, prompt, timeoutMs) => {
       const seconds = Math.round((timeoutMs ?? 90_000) / 1000);
       const startedAt = Date.now();
       const spinner = startSpinner(`Generating (times out after ${seconds}s)...`);
       let response;
       try {
-        response = await rawGenerate(model, prompt, timeoutMs);
+        response = await backend.generate(model, prompt, timeoutMs);
       } catch (err) {
         spinner.stop();
         throw err;
@@ -79,14 +78,16 @@ function benchDepsWithProgress(color: boolean): BenchDeps {
       );
       return response;
     },
-    unloadModel: async (model) => {
-      const spinner = startSpinner(`Unloading ${model}...`);
-      try {
-        await rawUnloadModel(model);
-      } finally {
-        spinner.stop();
-      }
-    },
+    unload: unload
+      ? async (model) => {
+          const spinner = startSpinner(`Unloading ${model}...`);
+          try {
+            await unload(model);
+          } finally {
+            spinner.stop();
+          }
+        }
+      : undefined,
   };
 }
 
@@ -134,12 +135,15 @@ export function createProgram(): Command {
       const color = shouldUseColor({ noColorFlag: !opts.color });
       try {
         const target = normalizeModelTarget(model);
-        const tags = await fetchTags();
-        const existing = tags.models.find((m) => m.name === target || m.model === target);
+        const { models: local } = await ollamaBackend.localModels();
+        const existing = local.find((m) => m.name === target);
         for (const line of describeBenchPlan(model, existing)) {
           console.error(info(line, color));
         }
-        const result = await runBench(model, benchDepsWithProgress(color));
+        const result = await runBench(model, {
+          backend: withProgress(ollamaBackend, color),
+          probe: selectProbe(process.platform)!,
+        });
         console.log(formatBenchResult(result, { color }));
       } catch (err) {
         console.error(error(`${label('Error:', color)} ${(err as Error).message}`, color));

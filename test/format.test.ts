@@ -176,6 +176,7 @@ describe('formatBenchResult', () => {
       totalDurationSeconds: 24.06,
       memoryBefore,
       memoryAfter,
+      notes: [],
     };
     const output = formatBenchResult(result);
     expect(output).toContain('gemma3:12b');
@@ -193,6 +194,7 @@ describe('formatBenchResult', () => {
       totalDurationSeconds: null,
       memoryBefore,
       memoryAfter,
+      notes: [],
     };
     const output = formatBenchResult(result);
     expect(output).toContain('timed-out');
@@ -209,8 +211,31 @@ describe('formatBenchResult', () => {
       totalDurationSeconds: null,
       memoryBefore,
       memoryAfter,
+      notes: [],
     };
     const output = formatBenchResult(result);
     expect(output).toContain('22.6');
+  });
+
+  it('prints degradation notes only when present', () => {
+    const withoutNotes: BenchResult = {
+      model: 'gemma3:12b',
+      status: 'completed',
+      sizeVramGb: null,
+      evalTokensPerSecond: 15.5,
+      loadDurationSeconds: 12.88,
+      totalDurationSeconds: 24.06,
+      memoryBefore,
+      memoryAfter,
+      notes: [],
+    };
+    expect(formatBenchResult(withoutNotes)).not.toContain('⚠');
+
+    const withNotes: BenchResult = {
+      ...withoutNotes,
+      notes: ["Fixture can't report per-model VRAM; footprint shown is the system-memory delta only"],
+    };
+    const output = formatBenchResult(withNotes);
+    expect(output).toContain("Fixture can't report per-model VRAM");
   });
 });

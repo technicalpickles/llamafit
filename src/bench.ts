@@ -1,16 +1,6 @@
-import {
-  fetchTags as realFetchTags,
-  fetchPs as realFetchPs,
-  generate as realGenerate,
-  unloadModel as realUnloadModel,
-  pullModel as realPullModel,
-  type OllamaTagsResponse,
-  type OllamaPsResponse,
-  type OllamaPsModel,
-  type OllamaGenerateResponse,
-} from './backends/ollama/client.js';
-import { selectProbe } from './probes/registry.js';
-import type { SystemMemoryState } from './probes/types.js';
+import type { Backend } from './backends/types.js';
+import type { SystemProbe, SystemMemoryState } from './probes/types.js';
+import type { GenerateResult } from './types.js';
 
 const BENCH_PROMPT = 'Write a 150 word short story about a robot learning to paint.';
 export const GENERATE_TIMEOUT_MS = 90_000;
@@ -18,7 +8,7 @@ export const GENERATE_TIMEOUT_MS = 90_000;
 /** Ollama normalizes an untagged name to `:latest` in its own API responses, so
  * matching what the user typed against those responses needs the same normalization.
  * Only the *matching* is normalized: pull/generate/unload still get the raw input,
- * which Ollama resolves itself. */
+ * which the backend resolves itself. */
 export function normalizeModelTarget(model: string): string {
   return model.includes(':') ? model : `${model}:latest`;
 }
@@ -32,55 +22,63 @@ export interface BenchResult {
   totalDurationSeconds: number | null;
   memoryBefore: SystemMemoryState;
   memoryAfter: SystemMemoryState;
+  /** Degradation messages, e.g. missing loadedModels/unload capability. Empty for Ollama. */
+  notes: string[];
 }
 
 export interface BenchDeps {
-  fetchTags: () => Promise<OllamaTagsResponse>;
-  fetchPs: () => Promise<OllamaPsResponse>;
-  generate: (model: string, prompt: string, timeoutMs?: number) => Promise<OllamaGenerateResponse | null>;
-  unloadModel: (model: string) => Promise<void>;
-  pullModel: (model: string) => Promise<void>;
-  readSystemMemory: () => Promise<SystemMemoryState>;
+  backend: Backend;
+  probe: SystemProbe;
 }
 
-const defaultDeps: BenchDeps = {
-  fetchTags: realFetchTags,
-  fetchPs: realFetchPs,
-  generate: realGenerate,
-  unloadModel: realUnloadModel,
-  pullModel: realPullModel,
-  readSystemMemory: () => selectProbe(process.platform)!.read(),
-};
-
-export async function runBench(model: string, deps: BenchDeps = defaultDeps): Promise<BenchResult> {
+export async function runBench(model: string, deps: BenchDeps): Promise<BenchResult> {
+  const { backend, probe } = deps;
   const target = normalizeModelTarget(model);
+  const notes: string[] = [];
 
-  const tags = await deps.fetchTags();
-  const alreadyPulled = tags.models.some((m) => m.name === target || m.model === target);
+  const { models: local } = await backend.localModels();
+  const alreadyPulled = local.some((m) => m.name === target);
   if (!alreadyPulled) {
-    await deps.pullModel(model);
+    if (!backend.pull) {
+      throw new Error(
+        `${backend.displayName} can't pull models — pull '${model}' yourself, then re-run`
+      );
+    }
+    await backend.pull(model);
   }
 
-  const memoryBefore = await deps.readSystemMemory();
+  if (!backend.loadedModels) {
+    notes.push(
+      `${backend.displayName} can't report per-model VRAM; footprint shown is the system-memory delta only`
+    );
+  }
+  if (!backend.unload) {
+    notes.push(`${backend.displayName} can't unload models — '${model}' is still loaded`);
+  }
+
+  const memoryBefore = await probe.read();
 
   // Once generate() has been called, the model may be resident in VRAM — everything
-  // from here through reading its post-run state must unload it on the way out, even
-  // if generate() itself throws or fetchPs()/readSystemMemory() throw afterward.
-  // Otherwise a failure here leaves the model loaded, silently contaminating the next
-  // benchmark's memory readings.
-  let response: OllamaGenerateResponse | null;
-  let running: OllamaPsModel | undefined;
+  // from here through reading its post-run state must unload it on the way out (when
+  // the backend can), even if generate() itself throws or loadedModels()/probe.read()
+  // throw afterward. Otherwise a failure here leaves the model loaded, silently
+  // contaminating the next benchmark's memory readings.
+  let response: GenerateResult | null;
+  let sizeVramGb: number | null = null;
   let memoryAfter: SystemMemoryState;
   try {
-    response = await deps.generate(model, BENCH_PROMPT, GENERATE_TIMEOUT_MS);
-    const ps = await deps.fetchPs();
-    running = ps.models.find((m) => m.name === target || m.model === target);
-    memoryAfter = await deps.readSystemMemory();
+    response = await backend.generate(model, BENCH_PROMPT, GENERATE_TIMEOUT_MS);
+    if (backend.loadedModels) {
+      const loaded = await backend.loadedModels();
+      const running = loaded.find((m) => m.name === target);
+      sizeVramGb = running ? running.sizeVramGb : null;
+    }
+    memoryAfter = await probe.read();
   } finally {
-    await deps.unloadModel(model);
+    if (backend.unload) {
+      await backend.unload(model);
+    }
   }
-
-  const sizeVramGb = running ? running.size_vram / 1e9 : null;
 
   if (response === null) {
     return {
@@ -92,12 +90,13 @@ export async function runBench(model: string, deps: BenchDeps = defaultDeps): Pr
       totalDurationSeconds: null,
       memoryBefore,
       memoryAfter,
+      notes,
     };
   }
 
   const evalTokensPerSecond =
-    response.eval_count && response.eval_duration
-      ? response.eval_count / (response.eval_duration / 1e9)
+    response.evalCount && response.evalDurationSeconds
+      ? response.evalCount / response.evalDurationSeconds
       : null;
 
   return {
@@ -105,9 +104,10 @@ export async function runBench(model: string, deps: BenchDeps = defaultDeps): Pr
     status: 'completed',
     sizeVramGb,
     evalTokensPerSecond,
-    loadDurationSeconds: response.load_duration != null ? response.load_duration / 1e9 : null,
-    totalDurationSeconds: response.total_duration != null ? response.total_duration / 1e9 : null,
+    loadDurationSeconds: response.loadDurationSeconds,
+    totalDurationSeconds: response.totalDurationSeconds,
     memoryBefore,
     memoryAfter,
+    notes,
   };
 }
