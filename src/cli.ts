@@ -14,6 +14,9 @@ import {
   type OllamaTagsModel,
 } from './backends/ollama/client.js';
 import { selectProbe } from './probes/registry.js';
+import { ollamaBackend } from './backends/ollama/index.js';
+import { formulaEstimator } from './estimators/formula.js';
+import { GapCollector } from './gaps.js';
 import { formatCheckTable, formatCheckJson, formatBenchResult } from './format.js';
 import { shouldUseColor, success, warn, error, info, label } from './colors.js';
 import { startSpinner } from './progress.js';
@@ -102,7 +105,14 @@ export function createProgram(): Command {
     .action(async (opts: { json?: boolean; query: string; color: boolean }) => {
       const color = shouldUseColor({ noColorFlag: !opts.color });
       try {
-        const result = await runCheck(opts.query);
+        // Gaps are collected but not printed yet — the multi-backend CLI overhaul that
+        // renders them is a separate change; this keeps check's output as it was.
+        const result = await runCheck(opts.query, {
+          backend: ollamaBackend,
+          probe: selectProbe(process.platform)!,
+          estimator: formulaEstimator,
+          gaps: new GapCollector(),
+        });
         // Spec's Error Handling section: a failed remote scrape warns on stderr and
         // continues, so the table on stdout stays machine-pipeable.
         if (result.scrapeWarning) {

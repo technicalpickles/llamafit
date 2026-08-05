@@ -1,14 +1,11 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { runCheck } from '../src/check.js';
+import { runCheck, type CheckDeps } from '../src/check.js';
 import { formatCheckTable, formatCheckJson, formatBenchResult } from '../src/format.js';
 import type { BenchResult } from '../src/bench.js';
-import type { OllamaTagsResponse, OllamaPsResponse } from '../src/backends/ollama/client.js';
 import type { SystemMemoryState } from '../src/probes/types.js';
-
-function loadFixture<T>(name: string): T {
-  return JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf-8'));
-}
+import { formulaEstimator } from '../src/estimators/formula.js';
+import { GapCollector } from '../src/gaps.js';
+import { fixtureBackend, fixtureProbe } from './helpers/fixture-backend.js';
 
 const SYSTEM: SystemMemoryState = {
   totalGb: 24,
@@ -21,17 +18,14 @@ const SYSTEM: SystemMemoryState = {
   swapFreeGb: 1.5,
 };
 
-const deps = {
-  fetchTags: async () => loadFixture<OllamaTagsResponse>('api-tags.json'),
-  fetchPs: async () => loadFixture<OllamaPsResponse>('api-ps-loaded.json'),
-  readSystemMemory: async () => SYSTEM,
-  scrapeSearch: async (_query: string) => {
-    const { parseSearchResults } = await import('../src/backends/ollama/scrape.js');
-    return parseSearchResults(
-      readFileSync(new URL('./fixtures/ollama-search-mlx.html', import.meta.url), 'utf8')
-    );
-  },
-};
+function deps(): CheckDeps {
+  return {
+    backend: fixtureBackend(),
+    probe: fixtureProbe(SYSTEM),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  };
+}
 
 const BENCH: BenchResult = {
   model: 'gemma3:12b',
@@ -46,14 +40,14 @@ const BENCH: BenchResult = {
 
 describe('output guardrail (must stay byte-identical through the carve-out)', () => {
   it('check table', async () => {
-    const result = await runCheck('mlx', deps);
+    const result = await runCheck('mlx', deps());
     await expect(formatCheckTable(result, { color: false })).toMatchFileSnapshot(
       './fixtures/guardrail-check-table.txt'
     );
   });
 
   it('check json', async () => {
-    const result = await runCheck('mlx', deps);
+    const result = await runCheck('mlx', deps());
     await expect(formatCheckJson(result)).toMatchFileSnapshot('./fixtures/guardrail-check.json');
   });
 
