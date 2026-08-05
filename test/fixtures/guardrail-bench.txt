@@ -1,0 +1,11 @@
+Model: gemma3:12b
+  https://ollama.com/library/gemma3
+
+Status: ✓ completed
+VRAM: 8.60GB
+
+Load duration: 4.20s
+Tokens/sec: 23.4
+Total duration: 18.90s
+
+Swap used: 0.5GB -> 0.9GB (Δ +0.4GB)
