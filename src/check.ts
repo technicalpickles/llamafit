@@ -7,7 +7,8 @@ import {
   type OllamaPsResponse,
   type OllamaPsModel,
 } from './ollama-client.js';
-import { readSystemMemory as realReadSystemMemory, type SystemMemoryState } from './system-memory.js';
+import { selectProbe } from './probes/registry.js';
+import type { SystemMemoryState } from './probes/types.js';
 import { formulaEstimator, classifyVerdict } from './estimators/formula.js';
 import type { Verdict } from './estimators/types.js';
 import { loadThresholds } from './data.js';
@@ -41,14 +42,14 @@ export interface CheckResult {
 export interface CheckDeps {
   fetchTags: () => Promise<OllamaTagsResponse>;
   fetchPs: () => Promise<OllamaPsResponse>;
-  readSystemMemory: () => SystemMemoryState;
+  readSystemMemory: () => Promise<SystemMemoryState>;
   scrapeSearch: (query: string) => Promise<RemoteModelCandidate[]>;
 }
 
 const defaultDeps: CheckDeps = {
   fetchTags: realFetchTags,
   fetchPs: realFetchPs,
-  readSystemMemory: realReadSystemMemory,
+  readSystemMemory: () => selectProbe(process.platform)!.read(),
   scrapeSearch: realScrapeSearch,
 };
 
@@ -58,7 +59,7 @@ export async function runCheck(query = 'mlx', deps: CheckDeps = defaultDeps): Pr
   const cloudModels = tags.models.filter(isCloudModel).map((m) => m.name);
   const running = new Map<string, OllamaPsModel>(ps.models.map((m) => [m.name, m]));
 
-  const system = deps.readSystemMemory();
+  const system = await deps.readSystemMemory();
   const baselineHeadroomGb = system.totalGb - loadThresholds().baselineReserveGb['darwin'];
   // Deliberate approximation: wired is the only genuinely non-reclaimable figure our
   // system-memory reader captures. Everything else (active, inactive, compressed, free)

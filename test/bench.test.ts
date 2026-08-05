@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { runBench } from '../src/bench.js';
 import type { OllamaTagsResponse, OllamaPsResponse, OllamaGenerateResponse } from '../src/ollama-client.js';
-import type { SystemMemoryState } from '../src/system-memory.js';
+import type { SystemMemoryState } from '../src/probes/types.js';
 
 const before: SystemMemoryState = {
   totalGb: 24,
@@ -55,7 +55,7 @@ describe('runBench', () => {
       },
       readSystemMemory: (() => {
         let callCount = 0;
-        return () => (callCount++ === 0 ? before : after);
+        return async () => (callCount++ === 0 ? before : after);
       })(),
     });
 
@@ -86,7 +86,7 @@ describe('runBench', () => {
       pullModel: async () => {},
       readSystemMemory: (() => {
         let callCount = 0;
-        return () => (callCount++ === 0 ? before : after);
+        return async () => (callCount++ === 0 ? before : after);
       })(),
     });
 
@@ -122,7 +122,7 @@ describe('runBench', () => {
           unloadCalled = true;
         },
         pullModel: async () => {},
-        readSystemMemory: () => before,
+        readSystemMemory: async () => before,
       })
     ).rejects.toThrow('ps failed');
 
@@ -164,7 +164,7 @@ describe('runBench', () => {
       pullModel: async () => {
         pullCalled = true;
       },
-      readSystemMemory: () => before,
+      readSystemMemory: async () => before,
     });
 
     expect(pullCalled).toBe(false); // already pulled as :latest
@@ -198,7 +198,7 @@ describe('runBench', () => {
       pullModel: async () => {
         pullCalled = true;
       },
-      readSystemMemory: () => before,
+      readSystemMemory: async () => before,
     });
 
     expect(pullCalled).toBe(true);

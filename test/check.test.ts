@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { runCheck } from '../src/check.js';
 import type { OllamaTagsResponse, OllamaPsResponse } from '../src/ollama-client.js';
-import type { SystemMemoryState } from '../src/system-memory.js';
+import type { SystemMemoryState } from '../src/probes/types.js';
 import type { RemoteModelCandidate } from '../src/scrape.js';
 
 function loadFixture<T>(name: string): T {
@@ -29,7 +29,7 @@ describe('runCheck', () => {
     const result = await runCheck('mlx', {
       fetchTags: async () => tags,
       fetchPs: async () => emptyPs,
-      readSystemMemory: () => fakeSystem,
+      readSystemMemory: async () => fakeSystem,
       scrapeSearch: async () => [],
     });
 
@@ -43,7 +43,7 @@ describe('runCheck', () => {
     const result = await runCheck('mlx', {
       fetchTags: async () => tags,
       fetchPs: async () => emptyPs,
-      readSystemMemory: () => fakeSystem,
+      readSystemMemory: async () => fakeSystem,
       scrapeSearch: async () => [],
     });
     expect(result.baselineHeadroomGb).toBe(16); // 24 - 8
@@ -54,7 +54,7 @@ describe('runCheck', () => {
     const result = await runCheck('mlx', {
       fetchTags: async () => tags,
       fetchPs: async () => emptyPs,
-      readSystemMemory: () => fakeSystem,
+      readSystemMemory: async () => fakeSystem,
       scrapeSearch: async () => [],
     });
     // 24 total - 3.8 wired. macOS's `unused` (0.14 here) is near-zero even when idle
@@ -67,7 +67,7 @@ describe('runCheck', () => {
     const result = await runCheck('mlx', {
       fetchTags: async () => tags,
       fetchPs: async () => emptyPs,
-      readSystemMemory: () => fakeSystem,
+      readSystemMemory: async () => fakeSystem,
       scrapeSearch: async () => [],
     });
     const row = result.rows.find((r) => r.name === 'gemma3:27b');
@@ -80,7 +80,7 @@ describe('runCheck', () => {
     const result = await runCheck('mlx', {
       fetchTags: async () => tags,
       fetchPs: async () => emptyPs,
-      readSystemMemory: () => fakeSystem,
+      readSystemMemory: async () => fakeSystem,
       scrapeSearch: async () => {
         throw new Error('network unreachable');
       },
@@ -110,7 +110,7 @@ describe('runCheck', () => {
     const result = await runCheck('mlx', {
       fetchTags: async () => tags,
       fetchPs: async () => emptyPs,
-      readSystemMemory: () => fakeSystem,
+      readSystemMemory: async () => fakeSystem,
       scrapeSearch: async () => remote,
     });
     const row = result.rows.find((r) => r.name === 'pd95/gptoss-mlx');
@@ -127,7 +127,7 @@ describe('runCheck', () => {
     const result = await runCheck('mlx', {
       fetchTags: async () => tags,
       fetchPs: async () => loadedPs,
-      readSystemMemory: () => fakeSystem,
+      readSystemMemory: async () => fakeSystem,
       scrapeSearch: async () => [],
     });
 
@@ -148,7 +148,7 @@ describe('runCheck', () => {
     const result = await runCheck('mlx', {
       fetchTags: async () => tags,
       fetchPs: async () => loadedPs,
-      readSystemMemory: () => fakeSystem,
+      readSystemMemory: async () => fakeSystem,
       scrapeSearch: async () => [],
     });
 
@@ -173,7 +173,7 @@ describe('runCheck', () => {
     const result = await runCheck('mlx', {
       fetchTags: async () => tags,
       fetchPs: async () => emptyPs,
-      readSystemMemory: () => fakeSystem,
+      readSystemMemory: async () => fakeSystem,
       scrapeSearch: async () => remote,
     });
     const row = result.rows.find((r) => r.name === 'pd95/gptoss-mlx');

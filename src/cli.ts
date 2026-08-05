@@ -13,7 +13,7 @@ import {
   parseParameterSize,
   type OllamaTagsModel,
 } from './ollama-client.js';
-import { readSystemMemory } from './system-memory.js';
+import { selectProbe } from './probes/registry.js';
 import { formatCheckTable, formatCheckJson, formatBenchResult } from './format.js';
 import { shouldUseColor, success, warn, error, info, label } from './colors.js';
 import { startSpinner } from './progress.js';
@@ -44,7 +44,7 @@ function benchDepsWithProgress(color: boolean): BenchDeps {
   return {
     fetchTags,
     fetchPs,
-    readSystemMemory,
+    readSystemMemory: () => selectProbe(process.platform)!.read(),
     pullModel: async (model) => {
       const startedAt = Date.now();
       const spinner = startSpinner(`Pulling ${model}...`);

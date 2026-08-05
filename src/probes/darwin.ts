@@ -1,15 +1,5 @@
 import { execFileSync } from 'node:child_process';
-
-export interface SystemMemoryState {
-  totalGb: number;
-  usedGb: number;
-  wiredGb: number;
-  compressorGb: number;
-  unusedGb: number;
-  swapTotalGb: number;
-  swapUsedGb: number;
-  swapFreeGb: number;
-}
+import type { SystemProbe, SystemMemoryState } from './types.js';
 
 function toGb(value: number, unit: string): number {
   return unit === 'G' ? value : value / 1024;
@@ -62,15 +52,44 @@ export function parseHwMemsize(text: string): number {
   return bytes / 1024 ** 3;
 }
 
-/** Live system read — thin adapter, not unit tested directly (see spec's Testing section). */
-export function readSystemMemory(): SystemMemoryState {
-  const topText = execFileSync('top', ['-l', '1', '-s', '0']).toString();
-  const swapText = execFileSync('sysctl', ['vm.swapusage']).toString();
-  const memText = execFileSync('sysctl', ['-n', 'hw.memsize']).toString();
+type Exec = (cmd: string, args: string[]) => string;
+const realExec: Exec = (cmd, args) => execFileSync(cmd, args).toString();
 
-  const { usedGb, wiredGb, compressorGb, unusedGb } = parseTopOutput(topText);
-  const { swapTotalGb, swapUsedGb, swapFreeGb } = parseSwapUsage(swapText);
-  const totalGb = parseHwMemsize(memText);
-
-  return { totalGb, usedGb, wiredGb, compressorGb, unusedGb, swapTotalGb, swapUsedGb, swapFreeGb };
+export function createDarwinProbe(exec: Exec = realExec): SystemProbe {
+  const commands = {
+    'top -l 1 -s 0': () => exec('top', ['-l', '1', '-s', '0']),
+    'sysctl vm.swapusage': () => exec('sysctl', ['vm.swapusage']),
+    'sysctl -n hw.memsize': () => exec('sysctl', ['-n', 'hw.memsize']),
+  };
+  return {
+    platform: 'darwin',
+    async read(): Promise<SystemMemoryState> {
+      const topText = commands['top -l 1 -s 0']();
+      const swapText = commands['sysctl vm.swapusage']();
+      const memText = commands['sysctl -n hw.memsize']();
+      const { usedGb, wiredGb, compressorGb, unusedGb } = parseTopOutput(topText);
+      const { swapTotalGb, swapUsedGb, swapFreeGb } = parseSwapUsage(swapText);
+      return {
+        totalGb: parseHwMemsize(memText),
+        usedGb,
+        wiredGb,
+        compressorGb,
+        unusedGb,
+        swapTotalGb,
+        swapUsedGb,
+        swapFreeGb,
+      };
+    },
+    async describe(): Promise<Record<string, string>> {
+      const out: Record<string, string> = {};
+      for (const [name, run] of Object.entries(commands)) {
+        try {
+          out[name] = run();
+        } catch (err) {
+          out[name] = `FAILED: ${(err as Error).message}`;
+        }
+      }
+      return out;
+    },
+  };
 }

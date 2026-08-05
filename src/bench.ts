@@ -9,7 +9,8 @@ import {
   type OllamaPsModel,
   type OllamaGenerateResponse,
 } from './ollama-client.js';
-import { readSystemMemory as realReadSystemMemory, type SystemMemoryState } from './system-memory.js';
+import { selectProbe } from './probes/registry.js';
+import type { SystemMemoryState } from './probes/types.js';
 
 const BENCH_PROMPT = 'Write a 150 word short story about a robot learning to paint.';
 export const GENERATE_TIMEOUT_MS = 90_000;
@@ -39,7 +40,7 @@ export interface BenchDeps {
   generate: (model: string, prompt: string, timeoutMs?: number) => Promise<OllamaGenerateResponse | null>;
   unloadModel: (model: string) => Promise<void>;
   pullModel: (model: string) => Promise<void>;
-  readSystemMemory: () => SystemMemoryState;
+  readSystemMemory: () => Promise<SystemMemoryState>;
 }
 
 const defaultDeps: BenchDeps = {
@@ -48,7 +49,7 @@ const defaultDeps: BenchDeps = {
   generate: realGenerate,
   unloadModel: realUnloadModel,
   pullModel: realPullModel,
-  readSystemMemory: realReadSystemMemory,
+  readSystemMemory: () => selectProbe(process.platform)!.read(),
 };
 
 export async function runBench(model: string, deps: BenchDeps = defaultDeps): Promise<BenchResult> {
@@ -60,7 +61,7 @@ export async function runBench(model: string, deps: BenchDeps = defaultDeps): Pr
     await deps.pullModel(model);
   }
 
-  const memoryBefore = deps.readSystemMemory();
+  const memoryBefore = await deps.readSystemMemory();
 
   // Once generate() has been called, the model may be resident in VRAM — everything
   // from here through reading its post-run state must unload it on the way out, even
@@ -74,7 +75,7 @@ export async function runBench(model: string, deps: BenchDeps = defaultDeps): Pr
     response = await deps.generate(model, BENCH_PROMPT, GENERATE_TIMEOUT_MS);
     const ps = await deps.fetchPs();
     running = ps.models.find((m) => m.name === target || m.model === target);
-    memoryAfter = deps.readSystemMemory();
+    memoryAfter = await deps.readSystemMemory();
   } finally {
     await deps.unloadModel(model);
   }
