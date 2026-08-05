@@ -8,7 +8,9 @@ import {
   type OllamaPsModel,
 } from './ollama-client.js';
 import { readSystemMemory as realReadSystemMemory, type SystemMemoryState } from './system-memory.js';
-import { estimateFootprint, classifyVerdict, type Verdict, MACOS_BASELINE_RESERVE_GB } from './estimate.js';
+import { formulaEstimator, classifyVerdict } from './estimators/formula.js';
+import type { Verdict } from './estimators/types.js';
+import { loadThresholds } from './data.js';
 import { scrapeSearch as realScrapeSearch, type RemoteModelCandidate } from './scrape.js';
 
 export interface CheckRow {
@@ -57,7 +59,7 @@ export async function runCheck(query = 'mlx', deps: CheckDeps = defaultDeps): Pr
   const running = new Map<string, OllamaPsModel>(ps.models.map((m) => [m.name, m]));
 
   const system = deps.readSystemMemory();
-  const baselineHeadroomGb = system.totalGb - MACOS_BASELINE_RESERVE_GB;
+  const baselineHeadroomGb = system.totalGb - loadThresholds().baselineReserveGb['darwin'];
   // Deliberate approximation: wired is the only genuinely non-reclaimable figure our
   // system-memory reader captures. Everything else (active, inactive, compressed, free)
   // is at least theoretically available to a big new allocation, at some performance
@@ -110,37 +112,43 @@ export async function runCheck(query = 'mlx', deps: CheckDeps = defaultDeps): Pr
         currentVerdict: 'unknown',
       };
     }
-    const estimate = estimateFootprint(paramB, m.details.quantization_level);
+    const estimate = formulaEstimator.estimate(
+      { parameterSizeB: paramB, quantizationLevel: m.details.quantization_level },
+      { baselineHeadroomGb, currentHeadroomGb }
+    );
     return {
       name: m.name,
       source: 'local',
       url: null,
       parameterSizeB: paramB,
       quantizationLevel: estimate.quantUsedForEstimate,
-      footprintGb: estimate.estimatedFootprintGb,
+      footprintGb: estimate.footprintGb,
       estimateSource: 'estimated',
       quantKnown: estimate.quantKnown,
-      baselineVerdict: classifyVerdict(estimate.estimatedFootprintGb, baselineHeadroomGb),
-      currentVerdict: classifyVerdict(estimate.estimatedFootprintGb, currentHeadroomGb),
+      baselineVerdict: estimate.baselineVerdict,
+      currentVerdict: estimate.currentVerdict,
     };
   });
 
   const remoteRows: CheckRow[] = remoteCandidates
     .filter((c) => c.parameterSizeB !== null)
     .map((c) => {
-      const estimate = estimateFootprint(c.parameterSizeB as number, '');
+      const estimate = formulaEstimator.estimate(
+        { parameterSizeB: c.parameterSizeB, quantizationLevel: '' },
+        { baselineHeadroomGb, currentHeadroomGb }
+      );
       return {
         name: c.name,
         source: 'remote',
         url: c.url,
         parameterSizeB: c.parameterSizeB,
         quantizationLevel: estimate.quantUsedForEstimate,
-        footprintGb: estimate.estimatedFootprintGb,
+        footprintGb: estimate.footprintGb,
         // Remote candidates aren't even pulled, so there is nothing to measure.
         estimateSource: 'estimated',
         quantKnown: estimate.quantKnown,
-        baselineVerdict: classifyVerdict(estimate.estimatedFootprintGb, baselineHeadroomGb),
-        currentVerdict: classifyVerdict(estimate.estimatedFootprintGb, currentHeadroomGb),
+        baselineVerdict: estimate.baselineVerdict,
+        currentVerdict: estimate.currentVerdict,
       };
     });
 
