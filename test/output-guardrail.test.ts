@@ -39,6 +39,22 @@ const BENCH: BenchResult = {
   notes: [],
 };
 
+// A degraded backend like llama-server: no model-hub page (only Ollama has one), and
+// none of the durations/rate it doesn't report — loadDurationSeconds is always null by
+// design, and this case also nulls out evalTokensPerSecond/totalDurationSeconds/
+// sizeVramGb to lock down the "not reported by this backend" fallback for each.
+const BENCH_DEGRADED: BenchResult = {
+  model: 'qwen3-30b',
+  status: 'completed',
+  sizeVramGb: null,
+  evalTokensPerSecond: null,
+  loadDurationSeconds: null,
+  totalDurationSeconds: null,
+  memoryBefore: SYSTEM,
+  memoryAfter: { ...SYSTEM, usedGb: 20.1, wiredGb: 3.4, swapUsedGb: 0.9 },
+  notes: ["llama-server can't report per-model VRAM; footprint shown is the system-memory delta only"],
+};
+
 describe('output guardrail (must stay byte-identical through the carve-out)', () => {
   it('check table', async () => {
     const result = await runCheck('mlx', deps());
@@ -53,8 +69,14 @@ describe('output guardrail (must stay byte-identical through the carve-out)', ()
   });
 
   it('bench output', () => {
-    return expect(formatBenchResult(BENCH, { color: false })).toMatchFileSnapshot(
-      './fixtures/guardrail-bench.txt'
+    return expect(
+      formatBenchResult(BENCH, { color: false, modelUrl: 'https://ollama.com/library/gemma3' })
+    ).toMatchFileSnapshot('./fixtures/guardrail-bench.txt');
+  });
+
+  it('bench output for a degraded backend (no model page, null durations)', () => {
+    return expect(formatBenchResult(BENCH_DEGRADED, { color: false })).toMatchFileSnapshot(
+      './fixtures/guardrail-bench-degraded.txt'
     );
   });
 });

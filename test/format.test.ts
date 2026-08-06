@@ -238,4 +238,44 @@ describe('formatBenchResult', () => {
     const output = formatBenchResult(withNotes);
     expect(output).toContain("Fixture can't report per-model VRAM");
   });
+
+  it('prints a real fallback instead of "undefined" for durations/rate the backend never reports', () => {
+    // llama-server always returns null loadDurationSeconds by design; a completed run
+    // can just as well have null evalTokensPerSecond/totalDurationSeconds too.
+    const result: BenchResult = {
+      model: 'qwen3-30b',
+      status: 'completed',
+      sizeVramGb: null,
+      evalTokensPerSecond: null,
+      loadDurationSeconds: null,
+      totalDurationSeconds: null,
+      memoryBefore,
+      memoryAfter,
+      notes: [],
+    };
+    const output = formatBenchResult(result);
+    expect(output).not.toContain('undefined');
+    expect(output).toContain('Load duration: not reported by this backend');
+    expect(output).toContain('Tokens/sec: not reported by this backend');
+    expect(output).toContain('Total duration: not reported by this backend');
+  });
+
+  it('omits the model-page line when no modelUrl is given (e.g. a backend with no model hub)', () => {
+    const result: BenchResult = {
+      model: 'qwen3-30b',
+      status: 'completed',
+      sizeVramGb: 5.1,
+      evalTokensPerSecond: 15.5,
+      loadDurationSeconds: 12.88,
+      totalDurationSeconds: 24.06,
+      memoryBefore,
+      memoryAfter,
+      notes: [],
+    };
+    expect(formatBenchResult(result)).not.toContain('http');
+    expect(formatBenchResult(result, { modelUrl: null })).not.toContain('http');
+
+    const withUrl = formatBenchResult(result, { modelUrl: 'https://ollama.com/library/qwen3' });
+    expect(withUrl).toContain('https://ollama.com/library/qwen3');
+  });
 });

@@ -1,0 +1,11 @@
+Model: qwen3-30b
+
+Status: ✓ completed
+
+Load duration: not reported by this backend
+Tokens/sec: not reported by this backend
+Total duration: not reported by this backend
+
+Swap used: 0.5GB -> 0.9GB (Δ +0.4GB)
+
+⚠ llama-server can't report per-model VRAM; footprint shown is the system-memory delta only

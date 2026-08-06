@@ -15,6 +15,7 @@ import { GapCollector, type Gap, type GapKind } from './gaps.js';
 import { writeDiagnosticsBundle, type DiagnosticsInput } from './diagnostics.js';
 import { agentPromptFor, issueUrlFor, repoUrl } from './prompts.js';
 import { formatCheckTable, formatCheckJson, formatBenchResult } from './format.js';
+import { modelPageUrl } from './backends/ollama/client.js';
 import { shouldUseColor, success, warn, error, info, label } from './colors.js';
 import { startSpinner } from './progress.js';
 
@@ -425,7 +426,10 @@ async function benchCommand(
       backend: withProgress(backend, color),
       probe: resolved.probe,
     });
-    deps.stdout(formatBenchResult(result, { color }));
+    // modelPageUrl only means something for Ollama, whose models actually live at
+    // ollama.com — other backends' local files have no such page, so don't fabricate one.
+    const modelUrl = backend.id === 'ollama' ? modelPageUrl(model) : null;
+    deps.stdout(formatBenchResult(result, { color, modelUrl }));
   } catch (err) {
     deps.stderr(error(`${label('Error:', color)} ${(err as Error).message}`, color));
     deps.setExitCode(1);

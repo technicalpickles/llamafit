@@ -1,11 +1,18 @@
 import type { CheckResult } from './check.js';
 import type { BenchResult } from './bench.js';
-import { modelPageUrl } from './backends/ollama/client.js';
 import { colorizeVerdict, colorizeBenchStatus, label, dim, warn } from './colors.js';
 
 export interface FormatOptions {
   color?: boolean;
+  /** The model's page on the backend's model hub, if it has one. Ollama models live at
+   * ollama.com; other backends (e.g. llama-server's local GGUFs) have no such page, so
+   * this is null and formatBenchResult omits the line rather than fabricate a URL. */
+  modelUrl?: string | null;
 }
+
+/** Printed in place of a duration/rate the backend didn't report, so degraded output
+ * reads as "not reported" rather than `undefineds`. */
+const NOT_REPORTED = 'not reported by this backend';
 
 export function formatCheckTable(result: CheckResult, opts: FormatOptions = {}): string {
   const color = opts.color ?? false;
@@ -92,8 +99,12 @@ export function formatBenchResult(result: BenchResult, opts: FormatOptions = {})
 
   // Grouped into identity / outcome / performance / memory-impact, with blank lines
   // between groups so the result doesn't read as one dense block.
+  const modelUrl = opts.modelUrl ?? null;
+
   lines.push(`${label('Model:', color)} ${result.model}`);
-  lines.push(dim(`  ${modelPageUrl(result.model)}`, color));
+  if (modelUrl !== null) {
+    lines.push(dim(`  ${modelUrl}`, color));
+  }
   lines.push('');
 
   lines.push(`${label('Status:', color)} ${colorizeBenchStatus(result.status, color)}`);
@@ -103,9 +114,15 @@ export function formatBenchResult(result: BenchResult, opts: FormatOptions = {})
 
   lines.push('');
   if (result.status === 'completed') {
-    lines.push(`${label('Load duration:', color)} ${result.loadDurationSeconds?.toFixed(2)}s`);
-    lines.push(`${label('Tokens/sec:', color)} ${result.evalTokensPerSecond?.toFixed(1)}`);
-    lines.push(`${label('Total duration:', color)} ${result.totalDurationSeconds?.toFixed(2)}s`);
+    lines.push(
+      `${label('Load duration:', color)} ${result.loadDurationSeconds !== null ? `${result.loadDurationSeconds.toFixed(2)}s` : NOT_REPORTED}`
+    );
+    lines.push(
+      `${label('Tokens/sec:', color)} ${result.evalTokensPerSecond !== null ? result.evalTokensPerSecond.toFixed(1) : NOT_REPORTED}`
+    );
+    lines.push(
+      `${label('Total duration:', color)} ${result.totalDurationSeconds !== null ? `${result.totalDurationSeconds.toFixed(2)}s` : NOT_REPORTED}`
+    );
   } else {
     lines.push('Did not complete within timeout — likely heavy swap contention.');
   }
