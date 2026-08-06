@@ -51,13 +51,18 @@ A few flags worth knowing about:
   and gap reporting still go to stderr, so piping the table doesn't pick up
   the chatter.
 
-Point at a non-default server with `OLLAMA_HOST`, either as `host:port` or a
-full URL:
+Point at a non-default server with `OLLAMA_HOST` (Ollama) or
+`LLAMA_SERVER_BASE_URL` (llama-server), either as `host:port` or a full URL:
 
 ```bash
 OLLAMA_HOST=192.168.1.50:11434 llamafit check
 OLLAMA_HOST=http://192.168.1.50:11434 llamafit check
+
+LLAMA_SERVER_BASE_URL=192.168.1.50:8080 llamafit check
+LLAMA_SERVER_BASE_URL=http://192.168.1.50:8080 llamafit check
 ```
+
+`LLAMA_SERVER_BASE_URL` defaults to `http://localhost:8080`.
 
 ## Reading the check table
 
@@ -110,10 +115,14 @@ be handed straight to an agent along with the bundle.
 
 ## Supported today / roadmap
 
-- **Today**: Ollama (backend), macOS (platform).
+- **Today**: Ollama and llama-server (backends, router mode only for the
+  latter), macOS (platform). llama-server's router mode only exposes GGUF
+  metadata for a model once it's been loaded at least once this server
+  lifetime, so a model that's never been loaded shows up with `?` for
+  params/quant/footprint instead of a real number, and llama-server never
+  reports per-model VRAM the way Ollama's `/api/ps` does.
 - **Next**, each its own phase: `linux-probe` (a Linux `SystemProbe`),
-  `llama-server-backend` (llama.cpp's `llama-server`), `unsloth-backend`
-  (Unsloth Studio's OpenAI-compatible API).
+  `unsloth-backend` (Unsloth Studio's OpenAI-compatible API).
 
 ## Design
 
@@ -130,4 +139,5 @@ be handed straight to an agent along with the bundle.
 - macOS (system memory reads use `top`/`sysctl`; Linux support is on the
   roadmap above)
 - Node >= 20
-- A running `ollama serve` for both commands
+- A running `ollama serve`, or a running `llama-server` in router mode, for
+  both commands
