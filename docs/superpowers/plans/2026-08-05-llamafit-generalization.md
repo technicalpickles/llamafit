@@ -1,14 +1,14 @@
-# llmfit Generalization Implementation Plan
+# llamafit Generalization Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Carve ollama-scope into llmfit: three adapter interfaces (Backend, SystemProbe, Estimator), a data layer for quants/calibration/thresholds, a gap→diagnostics-bundle→agent-prompt failure flow, and the rename + npm publish prep.
+**Goal:** Carve ollama-scope into llamafit: three adapter interfaces (Backend, SystemProbe, Estimator), a data layer for quants/calibration/thresholds, a gap→diagnostics-bundle→agent-prompt failure flow, and the rename + npm publish prep.
 
 **Architecture:** In-tree adapters behind TypeScript interfaces; existing macOS+Ollama code becomes the reference implementation of each interface with behavior unchanged (guarded by an output snapshot test written first). Cheaply-varying values move to `data/*.json`. Every "can't handle this" callsite records a typed Gap; the CLI turns gaps into a diagnostics bundle plus two exits (paste-to-agent prompt, pre-filled GitHub issue URL).
 
 **Tech Stack:** TypeScript (ESM, `.js` import suffixes), Node >= 20, vitest, commander, cheerio. No new runtime dependencies.
 
-**Spec:** `docs/superpowers/specs/2026-08-05-llmfit-generalization-design.md` — read it before starting any task.
+**Spec:** `docs/superpowers/specs/2026-08-05-llamafit-generalization-design.md` — read it before starting any task.
 
 ## Global Constraints
 
@@ -105,7 +105,7 @@ Open the three `test/fixtures/guardrail-*` files and confirm they contain a real
 
 ```bash
 git add test/output-guardrail.test.ts test/fixtures/guardrail-*
-git commit -m "test: freeze check/bench output before the llmfit carve-out"
+git commit -m "test: freeze check/bench output before the llamafit carve-out"
 ```
 
 ---
@@ -988,7 +988,7 @@ One bundle format for every gap.
   export function buildBundle(input: DiagnosticsInput): string  // scrubbed JSON text
   export function writeDiagnosticsBundle(input: DiagnosticsInput, opts?: WriteOptions): string  // returns absolute path
   ```
-- Filename: `llmfit-diagnostics-<YYYYMMDD-HHmmss>.json` (from `opts.now`, local time).
+- Filename: `llamafit-diagnostics-<YYYYMMDD-HHmmss>.json` (from `opts.now`, local time).
 - Scrubbing: in the serialized JSON text, replace every occurrence of `os.homedir()` with `~` and of `os.hostname()` with `<host>`.
 
 - [ ] **Step 1: Write failing tests**
@@ -1021,9 +1021,9 @@ describe('diagnostics bundle', () => {
     expect(text).toContain('~');
   });
   it('writes a timestamped file and returns its path', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'llmfit-test-'));
+    const dir = mkdtempSync(join(tmpdir(), 'llamafit-test-'));
     const path = writeDiagnosticsBundle(input, { dir, now: new Date('2026-08-05T14:30:00') });
-    expect(path).toBe(join(dir, 'llmfit-diagnostics-20260805-143000.json'));
+    expect(path).toBe(join(dir, 'llamafit-diagnostics-20260805-143000.json'));
     expect(JSON.parse(readFileSync(path, 'utf8')).version).toBe('0.1.0');
   });
 });
@@ -1059,7 +1059,7 @@ function timestamp(now: Date): string {
 }
 
 export function writeDiagnosticsBundle(input: DiagnosticsInput, opts: WriteOptions = {}): string {
-  const path = resolve(join(opts.dir ?? process.cwd(), `llmfit-diagnostics-${timestamp(opts.now ?? new Date())}.json`));
+  const path = resolve(join(opts.dir ?? process.cwd(), `llamafit-diagnostics-${timestamp(opts.now ?? new Date())}.json`));
   writeFileSync(path, buildBundle(input));
   return path;
 }
@@ -1105,7 +1105,7 @@ The two exits: paste-to-agent prompt and pre-filled issue URL, templated per gap
     ```
   - `unknown-quant`:
     ```
-    Clone <repoUrl>. My models use a quantization llmfit doesn't know: see the
+    Clone <repoUrl>. My models use a quantization llamafit doesn't know: see the
     unknown-quant gap in <bundlePath>.
     Add an entry or alias for it to data/quants.json with a bytes-per-param value,
     citing a source for the value in the PR body. See docs/adapters.md ("Quantization
@@ -1113,7 +1113,7 @@ The two exits: paste-to-agent prompt and pre-filled issue URL, templated per gap
     ```
   - `no-backend-detected`:
     ```
-    Clone <repoUrl>. llmfit found no supported inference backend on my machine: see
+    Clone <repoUrl>. llamafit found no supported inference backend on my machine: see
     the no-backend-detected gap in <bundlePath> for what it probed.
     If I'm running a backend it should know (check the bundle evidence), implement the
     Backend interface for it. Reference implementation: src/backends/ollama/. Contract
@@ -1122,7 +1122,7 @@ The two exits: paste-to-agent prompt and pre-filled issue URL, templated per gap
     ```
   - `backend-response-unexpected` and `scrape-failed` share one template:
     ```
-    Clone <repoUrl>. llmfit hit a response it couldn't handle: see the <kind> gap in
+    Clone <repoUrl>. llamafit hit a response it couldn't handle: see the <kind> gap in
     <bundlePath> for the raw response.
     Fix the parsing (or add graceful handling) where the gap's evidence points, add a
     fixture reproducing my response, run the tests, and open a PR.
@@ -1136,7 +1136,7 @@ import { describe, expect, it } from 'vitest';
 import { agentPromptFor, issueUrlFor, repoUrl } from '../src/prompts.js';
 
 const gap = { kind: 'unsupported-platform' as const, summary: 'no SystemProbe for freebsd', evidence: { platform: 'freebsd' } };
-const ctx = { bundlePath: '/tmp/llmfit-diagnostics-20260805-143000.json', repoUrl: 'https://github.com/technicalpickles/llmfit' };
+const ctx = { bundlePath: '/tmp/llamafit-diagnostics-20260805-143000.json', repoUrl: 'https://github.com/technicalpickles/llamafit' };
 
 describe('contribution prompts', () => {
   it('repoUrl comes from package.json and is a clean https URL', () => {
@@ -1156,7 +1156,7 @@ describe('contribution prompts', () => {
   });
   it('issue URL encodes title and evidence', () => {
     const url = issueUrlFor(gap, { repoUrl: ctx.repoUrl });
-    expect(url).toContain('https://github.com/technicalpickles/llmfit/issues/new?');
+    expect(url).toContain('https://github.com/technicalpickles/llamafit/issues/new?');
     expect(url).toContain(encodeURIComponent('[unsupported-platform] no SystemProbe for freebsd'));
     expect(decodeURIComponent(url)).toContain('"platform": "freebsd"');
   });
@@ -1169,7 +1169,7 @@ describe('contribution prompts', () => {
 
 - [ ] **Step 2: Run to verify fail, implement, run to verify pass**
 
-Implement with a `Record<GapKind, (gap, ctx) => string>` template map (the two shared kinds referencing one function); `repoUrl()` reads `package.json` via `readFileSync(new URL('../package.json', import.meta.url))`, accepts `repository` as string or `{ url }`, strips leading `git+` and trailing `.git`. **Note:** this task requires `package.json` to have a `repository` field — add `"repository": { "type": "git", "url": "https://github.com/technicalpickles/llmfit" }` now (the rename task finishes the rest of package.json).
+Implement with a `Record<GapKind, (gap, ctx) => string>` template map (the two shared kinds referencing one function); `repoUrl()` reads `package.json` via `readFileSync(new URL('../package.json', import.meta.url))`, accepts `repository` as string or `{ url }`, strips leading `git+` and trailing `.git`. **Note:** this task requires `package.json` to have a `repository` field — add `"repository": { "type": "git", "url": "https://github.com/technicalpickles/llamafit" }` now (the rename task finishes the rest of package.json).
 
 Run: `npx vitest run test/prompts.test.ts` — expected: PASS.
 
@@ -1198,7 +1198,7 @@ The CLI turns gaps into the bundle + both exits; adds `--backend` and `--diagnos
     1. Resolve probe: `selectProbe(process.platform)`. `null` → record `unsupported-platform` gap with `evidence: { platform: process.platform, release: os.release(), arch: os.arch() }` → go to gap exit (below) and exit 1 (check can't classify anything without memory numbers).
     2. Resolve backend(s): `--backend <id>` → `findBackend` (unknown id → plain error listing known ids, exit 1; not a gap). Otherwise `detectBackends()`. Zero detected → record `no-backend-detected` gap with `evidence: { probed: allBackends().map(b => b.id) }` → gap exit, exit 1.
     3. `check`: run `runCheck` per detected backend, printing `formatCheckTable`. With exactly one backend, output is exactly today's. With several, print a `label('<displayName>', color)` heading line + blank line before each table (only in the multi-backend case, preserving the guardrail). `--json` with multiple backends emits `{ "<id>": <CheckResult>, ... }`; with one backend it stays today's bare `CheckResult` JSON.
-    4. Gap exit (also runs after a successful check that recorded gaps, and unconditionally with `--diagnose`): write the bundle (`probeEvidence` from `probe?.describe() ?? null`), then print to **stderr**: a `warn` line `Hit <n> thing(s) llmfit doesn't support yet — diagnostics written to <path>`, then for each gap: blank line, `label('To add support with an AI agent, paste this prompt:')`, the agent prompt, `label('Or file it:')`, the issue URL. Uses `repoUrl()` for both.
+    4. Gap exit (also runs after a successful check that recorded gaps, and unconditionally with `--diagnose`): write the bundle (`probeEvidence` from `probe?.describe() ?? null`), then print to **stderr**: a `warn` line `Hit <n> thing(s) llamafit doesn't support yet — diagnostics written to <path>`, then for each gap: blank line, `label('To add support with an AI agent, paste this prompt:')`, the agent prompt, `label('Or file it:')`, the issue URL. Uses `repoUrl()` for both.
   - `bench` degradation notes print via `formatBenchResult` (done in `bench-refactor`).
 
 - [ ] **Step 1: Extend `test/cli.test.ts`**
@@ -1222,7 +1222,7 @@ Then `npm test && npm run typecheck` — guardrail snapshots untouched.
 Run: `npm run build && node dist/cli.js check` (Ollama running)
 Expected: today's normal table, no gap output.
 Run: `node dist/cli.js check --diagnose`
-Expected: table + a `llmfit-diagnostics-*.json` in cwd + prompt/issue text on stderr. Delete the bundle file afterward.
+Expected: table + a `llamafit-diagnostics-*.json` in cwd + prompt/issue text on stderr. Delete the bundle file afterward.
 
 - [ ] **Step 4: Commit**
 
@@ -1247,7 +1247,7 @@ The contribution guide every generated prompt points at.
 
 Audience: an AI agent (or human) landing here from a generated prompt, with a diagnostics bundle in hand. Sections, each concrete:
 
-1. **How llmfit fits together** — three interfaces + data layer, one paragraph each, with file paths.
+1. **How llamafit fits together** — three interfaces + data layer, one paragraph each, with file paths.
 2. **Adding a SystemProbe** — the interface (quoted), what each field of `SystemMemoryState` means (crib the semantics from the README's "current headroom" section: `wiredGb` = genuinely unreclaimable memory), the darwin reference implementation walk-through, how to turn bundle `probeEvidence` into `test/fixtures/` files, registering in `src/probes/registry.ts`, adding a `baselineReserveGb` entry to `data/thresholds.json`, and the conformance expectations.
 3. **Adding a Backend** — the interface (quoted), which capabilities are optional and what absence means for `check`/`bench` output, the Ollama reference walk-through (`detect` via version endpoint, mapping to `ModelInfo`), fixture conventions (captured raw API responses in `test/fixtures/`), `describeBackendConformance` usage, registering in `src/backends/registry.ts`.
 4. **Quantization table** — `data/quants.json` format, when to add an alias vs a new entry, requirement: cite a source for bytes-per-param in the PR body.
@@ -1268,12 +1268,12 @@ git commit -m "docs: add adapter contribution guide for agents and humans"
 
 ---
 
-### Task: llmfit-rename
+### Task: llamafit-rename
 
 Rename the package and CLI; rewrite the README; prep for publish.
 
 **Files:**
-- Modify: `package.json`, `src/cli.ts`, `README.md`, `.gitignore` (add `llmfit-diagnostics-*.json`)
+- Modify: `package.json`, `src/cli.ts`, `README.md`, `.gitignore` (add `llamafit-diagnostics-*.json`)
 
 **Interfaces:**
 - Consumes: `repoUrl()` reads `package.json.repository` — set in `contribution-prompts`; keep it consistent here.
@@ -1282,13 +1282,13 @@ Rename the package and CLI; rewrite the README; prep for publish.
 
 ```json
 {
-  "name": "llmfit",
+  "name": "llamafit",
   "version": "0.2.0",
   "description": "Which local LLMs actually fit this machine? Checks models against real memory headroom.",
   "type": "module",
-  "bin": { "llmfit": "./dist/cli.js" },
+  "bin": { "llamafit": "./dist/cli.js" },
   "files": ["dist", "data", "README.md"],
-  "repository": { "type": "git", "url": "https://github.com/technicalpickles/llmfit" }
+  "repository": { "type": "git", "url": "https://github.com/technicalpickles/llamafit" }
 }
 ```
 
@@ -1296,23 +1296,23 @@ Rename the package and CLI; rewrite the README; prep for publish.
 
 - [ ] **Step 2: Update the CLI name**
 
-In `src/cli.ts`: `.name('llmfit')` and description `"Which local LLMs actually fit this machine?"`. Grep for remaining user-facing `ollama-scope` strings: `grep -rn "ollama-scope" src/ test/ --include="*.ts"` — anything user-facing changes to `llmfit`; fixture file paths and the ollama backend's own identifiers stay.
+In `src/cli.ts`: `.name('llamafit')` and description `"Which local LLMs actually fit this machine?"`. Grep for remaining user-facing `ollama-scope` strings: `grep -rn "ollama-scope" src/ test/ --include="*.ts"` — anything user-facing changes to `llamafit`; fixture file paths and the ollama backend's own identifiers stay.
 
 - [ ] **Step 3: Rewrite `README.md`**
 
 Structure (replacing the current Ollama-centric framing; keep the "current headroom" explanation section nearly verbatim since it's still true):
 
-- **llmfit** — one-paragraph pitch: checks local models against the machine's *real* memory headroom, not just "does it technically load"; supports pluggable backends/platforms; today: Ollama on macOS.
-- **Install/usage**: `npx llmfit check`, `npx llmfit bench <model>`, `--backend`, `--json`, `OLLAMA_HOST` note.
+- **llamafit** — one-paragraph pitch: checks local models against the machine's *real* memory headroom, not just "does it technically load"; supports pluggable backends/platforms; today: Ollama on macOS.
+- **Install/usage**: `npx llamafit check`, `npx llamafit bench <model>`, `--backend`, `--json`, `OLLAMA_HOST` note.
 - **Reading the table** and **About "current headroom"**: carried over from current README with names updated.
-- **When llmfit doesn't support your setup**: the pitch for the gap flow — run hits a gap → diagnostics bundle + a paste-to-your-agent prompt + an issue link. Point at `docs/adapters.md`.
+- **When llamafit doesn't support your setup**: the pitch for the gap flow — run hits a gap → diagnostics bundle + a paste-to-your-agent prompt + an issue link. Point at `docs/adapters.md`.
 - **Supported today / roadmap**: Ollama + macOS now; `linux-probe`, `llama-server-backend`, `unsloth-backend` phases next.
 - **Design docs**: link both specs.
 
 - [ ] **Step 4: Full verification**
 
 Run: `npm test && npm run typecheck && npm run build && node dist/cli.js --help`
-Expected: all green; help shows `llmfit`.
+Expected: all green; help shows `llamafit`.
 Run: `npm pack --dry-run`
 Expected: tarball contains `dist/`, `data/`, `README.md`, `package.json` — and **not** `src/`, `test/`, `docs/`.
 
@@ -1320,20 +1320,20 @@ Expected: tarball contains `dist/`, `data/`, `README.md`, `package.json` — and
 
 ```bash
 git add -A
-git commit -m "feat: rename to llmfit and prep npm packaging"
+git commit -m "feat: rename to llamafit and prep npm packaging"
 ```
 
 - [ ] **Step 6: Manual human steps (not for the executing agent — surface these to Josh at the end)**
 
-1. Rename the GitHub repo `ollama-scope` → `llmfit`, make it public.
-2. Update the local remote: `git remote set-url origin git@github.com:technicalpickles/llmfit.git`.
+1. Rename the GitHub repo `ollama-scope` → `llamafit`, make it public.
+2. Update the local remote: `git remote set-url origin git@github.com:technicalpickles/llamafit.git`.
 3. `npm publish` (needs npm auth; `prepublishOnly` runs tests + build).
-4. Smoke-test from clean: `npx llmfit@latest check`.
+4. Smoke-test from clean: `npx llamafit@latest check`.
 
 ---
 
 ## Execution notes
 
-- Task order matters: `output-guardrail` first, `llmfit-rename` last; the middle tasks go in the order written (each consumes the previous ones' interfaces).
+- Task order matters: `output-guardrail` first, `llamafit-rename` last; the middle tasks go in the order written (each consumes the previous ones' interfaces).
 - If any task breaks a `guardrail-*` snapshot, that task has a bug. The snapshot is the spec.
 - After the final task, capture followups (the three roadmap phases) as taskwarrior tasks per Josh's workflow rules.

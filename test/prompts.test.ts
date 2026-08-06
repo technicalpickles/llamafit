@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { agentPromptFor, issueUrlFor, repoUrl } from '../src/prompts.js';
 
 const gap = { kind: 'unsupported-platform' as const, summary: 'no SystemProbe for freebsd', evidence: { platform: 'freebsd' } };
-const ctx = { bundlePath: '/tmp/llmfit-diagnostics-20260805-143000.json', repoUrl: 'https://github.com/technicalpickles/llmfit' };
+const ctx = { bundlePath: '/tmp/llamafit-diagnostics-20260805-143000.json', repoUrl: 'https://github.com/technicalpickles/llamafit' };
 
 describe('contribution prompts', () => {
   it('repoUrl comes from package.json and is a clean https URL', () => {
@@ -22,7 +22,7 @@ describe('contribution prompts', () => {
   });
   it('issue URL encodes title and evidence', () => {
     const url = issueUrlFor(gap, { repoUrl: ctx.repoUrl });
-    expect(url).toContain('https://github.com/technicalpickles/llmfit/issues/new?');
+    expect(url).toContain('https://github.com/technicalpickles/llamafit/issues/new?');
     expect(url).toContain(encodeURIComponent('[unsupported-platform] no SystemProbe for freebsd'));
     expect(decodeURIComponent(url)).toContain('"platform": "freebsd"');
   });

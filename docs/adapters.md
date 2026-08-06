@@ -1,7 +1,7 @@
-# Adding platform and backend support to llmfit
+# Adding platform and backend support to llamafit
 
 You probably got here from a generated prompt (`src/prompts.ts`) pointing at a
-diagnostics bundle: a JSON file produced by `llmfit`'s `--diagnose` flow
+diagnostics bundle: a JSON file produced by `llamafit`'s `--diagnose` flow
 (`src/diagnostics.ts`) when it hit something it couldn't handle — an
 unsupported OS, no detectable inference backend, an unknown quantization, or
 a backend response it couldn't parse. This doc is the contract for fixing
@@ -14,9 +14,9 @@ output your machine's memory probe collected (or `null` if it never got that
 far). That's your ground truth; use it to build fixtures rather than
 hand-writing them.
 
-## 1. How llmfit fits together
+## 1. How llamafit fits together
 
-llmfit is three small interfaces plus a data layer, wired together by
+llamafit is three small interfaces plus a data layer, wired together by
 `src/check.ts` (static analysis) and `src/bench.ts` (live benchmark).
 
 **Backend** (`src/backends/types.ts`) talks to an inference server or
@@ -28,7 +28,7 @@ gracefully when a method is missing. The reference implementation is
 
 **SystemProbe** (`src/probes/types.ts`) reads how much memory the host has
 and how much of it is actually available, plus swap. It's the thing that
-makes llmfit platform-specific — there's exactly one probe per OS. The
+makes llamafit platform-specific — there's exactly one probe per OS. The
 reference implementation is `src/probes/darwin.ts`, registered in
 `src/probes/registry.ts`.
 
@@ -75,7 +75,7 @@ export interface SystemProbe {
 }
 ```
 
-`platform` must match the value `llmfit` sees from Node's `os.platform()`
+`platform` must match the value `llamafit` sees from Node's `os.platform()`
 (`darwin`, `linux`, `win32`, ...) — that's the string `src/probes/registry.ts`
 dispatches on.
 
@@ -88,7 +88,7 @@ number:
 - `totalGb` — total physical memory.
 - `usedGb` — memory in active use (whatever the OS calls "used").
 - `wiredGb` — the one field that matters most: memory the kernel genuinely
-  cannot reclaim (can't page out, can't compress). This is what llmfit
+  cannot reclaim (can't page out, can't compress). This is what llamafit
   subtracts from `totalGb` to get "current headroom" — a deliberate
   approximation, treated as an optimistic upper bound rather than an exact
   available-memory figure.
@@ -259,7 +259,7 @@ and never throws: a non-OK response or a network error both resolve to
 `{ detected: false, version: null, evidence: { baseUrl, error } }` rather
 than rejecting, matching the conformance suite's "never rejects" requirement.
 
-Mapping from Ollama's wire format to llmfit's types is factored into pure,
+Mapping from Ollama's wire format to llamafit's types is factored into pure,
 independently-tested functions in `src/backends/ollama/index.ts`:
 `mapTagsToLocalModels` (from `OllamaTagsResponse`, defined in
 `src/backends/ollama/client.ts`, to `LocalModels` — also where cloud models
@@ -347,7 +347,7 @@ when the bytes-per-param value actually differs — duplicating a value across
 two entries just makes the table harder to audit.
 
 **Requirement:** cite a source for the `bytesPerParam` value in your PR
-body. This number is a formula input, not something llmfit measures — get
+body. This number is a formula input, not something llamafit measures — get
 it wrong and every estimate downstream is wrong. A model card, a
 quantization scheme's spec, or a measured weights-file size divided by
 parameter count are all acceptable; "I guessed" is not.
@@ -374,7 +374,7 @@ multiplier exists because raw weights size undercounts actual VRAM use
 `src/data.ts` refuses to load the file if `provenance` is empty: "every
 multiplier needs evidence."
 
-`llmfit bench <model>` (`src/bench.ts`) is how you produce that evidence: it
+`llamafit bench <model>` (`src/bench.ts`) is how you produce that evidence: it
 loads a real model, runs a generation, and reports `sizeVramGb` — the actual
 measured resident VRAM (via the backend's `loadedModels()`, when available).
 Compare that to what the formula alone would predict

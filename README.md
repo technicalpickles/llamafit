@@ -1,41 +1,41 @@
-# llmfit
+# llamafit
 
 Checks whether local LLMs actually fit this machine, not just whether they
 technically load. A model can "fit" by Ollama's own bookkeeping and still
 push the whole system into heavy swap, because VRAM-footprint reporting like
 `/api/ps` has no signal about the rest of the machine's memory pressure.
-`llmfit` answers two questions:
+`llamafit` answers two questions:
 
-- **`llmfit check`** — static analysis, no models are loaded. Reads
+- **`llamafit check`** — static analysis, no models are loaded. Reads
   locally-pulled models plus a live scrape of `ollama.com/search`, estimates
   memory footprint from parameter count and quantization, and classifies
   each as comfortable / tight / will-thrash against both a fixed baseline
   reserve and whatever's actually free right now.
-- **`llmfit bench <model>`** — live benchmark. Pulls (if needed), loads,
+- **`llamafit bench <model>`** — live benchmark. Pulls (if needed), loads,
   runs a fixed prompt, and reports real VRAM usage, tokens/sec, and the
   before/after system memory and swap delta.
 
-Backends and platforms sit behind small interfaces, so `llmfit` isn't
+Backends and platforms sit behind small interfaces, so `llamafit` isn't
 permanently tied to Ollama or macOS, that's just where it started. When it
 hits something it doesn't support yet, it doesn't just fail quietly: see
-["When llmfit doesn't support your setup"](#when-llmfit-doesnt-support-your-setup)
+["When llamafit doesn't support your setup"](#when-llamafit-doesnt-support-your-setup)
 below.
 
 ## Usage
 
 ```bash
-npx llmfit check
-npx llmfit check --json
-npx llmfit check --query gemma
-npx llmfit bench gemma3:12b
+npx llamafit check
+npx llamafit check --json
+npx llamafit check --query gemma
+npx llamafit bench gemma3:12b
 ```
 
 Or install it locally:
 
 ```bash
-npm install -g llmfit
-llmfit check
-llmfit bench gemma3:12b
+npm install -g llamafit
+llamafit check
+llamafit bench gemma3:12b
 ```
 
 A few flags worth knowing about:
@@ -55,8 +55,8 @@ Point at a non-default server with `OLLAMA_HOST`, either as `host:port` or a
 full URL:
 
 ```bash
-OLLAMA_HOST=192.168.1.50:11434 llmfit check
-OLLAMA_HOST=http://192.168.1.50:11434 llmfit check
+OLLAMA_HOST=192.168.1.50:11434 llamafit check
+OLLAMA_HOST=http://192.168.1.50:11434 llamafit check
 ```
 
 ## Reading the check table
@@ -87,15 +87,15 @@ is what you'd need for a genuinely precise number, so treat current headroom
 as an optimistic upper bound and the baseline verdict as the conservative
 one.
 
-## When llmfit doesn't support your setup
+## When llamafit doesn't support your setup
 
-`llmfit` is built on a few small interfaces: a backend that talks to an
+`llamafit` is built on a few small interfaces: a backend that talks to an
 inference server, a system probe that reads memory, an estimator that turns
 model metadata into a verdict. Some failures mean one of those genuinely
 doesn't cover your setup yet: an unrecognized quantization string, a
 platform with no `SystemProbe`, or no backend it can detect at all. When
-that happens, `llmfit` writes a diagnostics bundle
-(`llmfit-diagnostics-<timestamp>.json`) with the raw evidence it collected,
+that happens, `llamafit` writes a diagnostics bundle
+(`llamafit-diagnostics-<timestamp>.json`) with the raw evidence it collected,
 prints a ready-to-paste prompt for handing to an AI coding agent, and
 prints a pre-filled GitHub issue link for handing to a human instead.
 
@@ -121,7 +121,7 @@ be handed straight to an agent along with the bundle.
   — the original memory estimation model, verdict thresholds, and the
   reasoning behind them, grounded in real measurements rather than
   spec-sheet math.
-- [`docs/superpowers/specs/2026-08-05-llmfit-generalization-design.md`](docs/superpowers/specs/2026-08-05-llmfit-generalization-design.md)
+- [`docs/superpowers/specs/2026-08-05-llamafit-generalization-design.md`](docs/superpowers/specs/2026-08-05-llamafit-generalization-design.md)
   — the backend/probe/estimator interfaces, the data layer, and the
   gap-to-bundle-to-prompt flow described above.
 

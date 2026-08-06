@@ -13,9 +13,9 @@ import type { SystemMemoryState } from '../src/probes/types.js';
 import { fixtureBackend, fixtureProbe } from './helpers/fixture-backend.js';
 
 describe('createProgram', () => {
-  it('names the program llmfit', () => {
+  it('names the program llamafit', () => {
     const program = createProgram();
-    expect(program.name()).toBe('llmfit');
+    expect(program.name()).toBe('llamafit');
   });
 
   it('has a non-empty description', () => {
@@ -58,7 +58,7 @@ const SYSTEM: SystemMemoryState = {
 
 /** Every bundle written by a test lands in its own temp dir — never the repo cwd. */
 function harness(overrides: Partial<CliDeps> = {}) {
-  const bundleDir = mkdtempSync(join(tmpdir(), 'llmfit-cli-test-'));
+  const bundleDir = mkdtempSync(join(tmpdir(), 'llamafit-cli-test-'));
   const stdout: string[] = [];
   const stderr: string[] = [];
   const exit = { code: 0 };
@@ -72,7 +72,7 @@ function harness(overrides: Partial<CliDeps> = {}) {
     selectProbe: () => fixtureProbe(SYSTEM),
     ...overrides,
   });
-  const bundles = () => readdirSync(bundleDir).filter((f) => f.startsWith('llmfit-diagnostics-'));
+  const bundles = () => readdirSync(bundleDir).filter((f) => f.startsWith('llamafit-diagnostics-'));
   return { deps, stdout, stderr, exit, bundleDir, bundles };
 }
 
@@ -109,7 +109,7 @@ describe('check command wiring', () => {
     expect(h.exit.code).toBe(1);
     expect(err).toContain('vllm');
     expect(err).toContain('fixture');
-    // An unknown id is user error, not a gap in llmfit: no prompt, no bundle.
+    // An unknown id is user error, not a gap in llamafit: no prompt, no bundle.
     expect(err).not.toContain('paste this prompt');
     expect(h.bundles()).toEqual([]);
   });

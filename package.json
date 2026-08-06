@@ -1,14 +1,14 @@
 {
-  "name": "llmfit",
+  "name": "llamafit",
   "version": "0.2.0",
   "description": "Which local LLMs actually fit this machine? Checks models against real memory headroom.",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/technicalpickles/llmfit"
+    "url": "https://github.com/technicalpickles/llamafit"
   },
   "bin": {
-    "llmfit": "./dist/cli.js"
+    "llamafit": "./dist/cli.js"
   },
   "files": ["dist", "data", "README.md"],
   "scripts": {

@@ -1,8 +1,8 @@
-# llmfit — Generalizing ollama-scope: Design
+# llamafit — Generalizing ollama-scope: Design
 
 ## Purpose
 
-Evolve `ollama-scope` from a macOS+Ollama-specific tool into **llmfit**, a
+Evolve `ollama-scope` from a macOS+Ollama-specific tool into **llamafit**, a
 shareable CLI that answers "which local LLMs actually fit this machine?"
 across multiple inference backends and platforms, with an explicit
 contribution funnel: when the tool hits something it doesn't support, it
@@ -31,8 +31,8 @@ part of this spec's implementation scope):
   llama-server, and unsloth are phased follow-ups
   (`linux-probe`, `llama-server-backend`, `unsloth-backend`), each getting
   its own plan against the by-then-real interfaces.
-- **Name/distribution**: rename to **llmfit** (verified available on npm),
-  publish to npm with a `bin` entry so `npx llmfit check` works cold, repo
+- **Name/distribution**: rename to **llamafit** (verified available on npm),
+  publish to npm with a `bin` entry so `npx llamafit check` works cold, repo
   public on GitHub.
 
 ## Non-goals
@@ -156,7 +156,7 @@ type Gap = {
 ```
 
 **Diagnostics bundle**: on any gap (or explicit `--diagnose`), write a
-JSON bundle to `llmfit-diagnostics-<timestamp>.json` in the current
+JSON bundle to `llamafit-diagnostics-<timestamp>.json` in the current
 directory (printed on write), containing: tool version, platform info, gap records with
 evidence, raw command outputs from `SystemProbe.describe()`, truncated raw
 API responses. Scrub obvious personal noise (home-dir paths, hostnames)
@@ -184,7 +184,7 @@ to by every generated prompt.
 
 ## Rename and publish
 
-- Package name `llmfit`, `bin: { "llmfit": "dist/cli.js" }`.
+- Package name `llamafit`, `bin: { "llamafit": "dist/cli.js" }`.
 - Repo renamed/public on GitHub (prerequisite: both failure-flow exits
   need a public clone/issue target). The prompt/issue templates read the
   repo URL from `package.json`, not hardcoded strings.

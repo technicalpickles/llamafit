@@ -32,7 +32,7 @@ src/probes/registry.ts, run the conformance tests, and open a PR.`;
 }
 
 function unknownQuantPrompt(gap: Gap, ctx: PromptContext): string {
-  return `Clone ${ctx.repoUrl}. My models use a quantization llmfit doesn't know: see the
+  return `Clone ${ctx.repoUrl}. My models use a quantization llamafit doesn't know: see the
 unknown-quant gap in ${ctx.bundlePath}.
 Add an entry or alias for it to data/quants.json with a bytes-per-param value,
 citing a source for the value in the PR body. See docs/adapters.md ("Quantization
@@ -40,7 +40,7 @@ table") for the format, then run the tests and open a PR.`;
 }
 
 function noBackendDetectedPrompt(gap: Gap, ctx: PromptContext): string {
-  return `Clone ${ctx.repoUrl}. llmfit found no supported inference backend on my machine: see
+  return `Clone ${ctx.repoUrl}. llamafit found no supported inference backend on my machine: see
 the no-backend-detected gap in ${ctx.bundlePath} for what it probed.
 If I'm running a backend it should know (check the bundle evidence), implement the
 Backend interface for it. Reference implementation: src/backends/ollama/. Contract
@@ -49,7 +49,7 @@ run the conformance tests, and open a PR.`;
 }
 
 function unexpectedResponsePrompt(gap: Gap, ctx: PromptContext): string {
-  return `Clone ${ctx.repoUrl}. llmfit hit a response it couldn't handle: see the ${gap.kind} gap in
+  return `Clone ${ctx.repoUrl}. llamafit hit a response it couldn't handle: see the ${gap.kind} gap in
 ${ctx.bundlePath} for the raw response.
 Fix the parsing (or add graceful handling) where the gap's evidence points, add a
 fixture reproducing my response, run the tests, and open a PR.`;

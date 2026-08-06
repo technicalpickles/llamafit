@@ -25,9 +25,9 @@ describe('diagnostics bundle', () => {
     expect(text).toContain('~');
   });
   it('writes a timestamped file and returns its path', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'llmfit-test-'));
+    const dir = mkdtempSync(join(tmpdir(), 'llamafit-test-'));
     const path = writeDiagnosticsBundle(input, { dir, now: new Date('2026-08-05T14:30:00') });
-    expect(path).toBe(join(dir, 'llmfit-diagnostics-20260805-143000.json'));
+    expect(path).toBe(join(dir, 'llamafit-diagnostics-20260805-143000.json'));
     expect(JSON.parse(readFileSync(path, 'utf8')).version).toBe('0.1.0');
   });
 });

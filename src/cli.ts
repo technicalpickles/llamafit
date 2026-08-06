@@ -159,7 +159,7 @@ async function contain(deps: CliDeps, color: boolean, run: () => Promise<void>):
 }
 
 /**
- * Gaps worth interrupting the user over: each one is a thing llmfit genuinely doesn't
+ * Gaps worth interrupting the user over: each one is a thing llamafit genuinely doesn't
  * support yet, and each has an agent prompt that would close it. `scrape-failed` is
  * deliberately absent — a flaky network is not a missing feature, so it keeps its
  * warn-and-continue behavior and only ever rides along in a bundle someone else asked for.
@@ -205,7 +205,7 @@ async function reportGaps(
 
   deps.stderr(
     warn(
-      `Hit ${promptable.length} thing(s) llmfit doesn't support yet — diagnostics written to ${bundlePath}`,
+      `Hit ${promptable.length} thing(s) llamafit doesn't support yet — diagnostics written to ${bundlePath}`,
       color
     )
   );
@@ -441,7 +441,7 @@ async function benchCommand(
 export function createProgram(): Command {
   const program = new Command();
   program
-    .name('llmfit')
+    .name('llamafit')
     .description('Which local LLMs actually fit this machine?');
 
   program

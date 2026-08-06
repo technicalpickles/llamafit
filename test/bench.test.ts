@@ -82,7 +82,7 @@ describe('runBench', () => {
   });
 
   it("matches an untagged model name against Ollama's :latest-normalized responses", async () => {
-    // `llmfit bench llama3.2` is the natural invocation, but Ollama reports the
+    // `llamafit bench llama3.2` is the natural invocation, but Ollama reports the
     // model as llama3.2:latest — exact-matching the raw input drops the VRAM reading
     // and triggers a needless re-pull.
     const generatedWith: string[] = [];

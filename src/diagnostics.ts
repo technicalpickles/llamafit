@@ -25,7 +25,7 @@ function timestamp(now: Date): string {
 }
 
 export function writeDiagnosticsBundle(input: DiagnosticsInput, opts: WriteOptions = {}): string {
-  const path = resolve(join(opts.dir ?? process.cwd(), `llmfit-diagnostics-${timestamp(opts.now ?? new Date())}.json`));
+  const path = resolve(join(opts.dir ?? process.cwd(), `llamafit-diagnostics-${timestamp(opts.now ?? new Date())}.json`));
   writeFileSync(path, buildBundle(input));
   return path;
 }
