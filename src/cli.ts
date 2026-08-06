@@ -11,7 +11,7 @@ import type { Backend } from './backends/types.js';
 import type { SystemProbe } from './probes/types.js';
 import type { Detection, ModelInfo } from './types.js';
 import { formulaEstimator } from './estimators/formula.js';
-import { GapCollector } from './gaps.js';
+import { GapCollector, type Gap, type GapKind } from './gaps.js';
 import { writeDiagnosticsBundle, type DiagnosticsInput } from './diagnostics.js';
 import { agentPromptFor, issueUrlFor, repoUrl } from './prompts.js';
 import { formatCheckTable, formatCheckJson, formatBenchResult } from './format.js';
@@ -145,9 +145,42 @@ export function createCliDeps(overrides: Partial<CliDeps> = {}): CliDeps {
 }
 
 /**
- * Writes the diagnostics bundle and prints, per gap, the two ways a user can get the gap
- * closed: a prompt to hand an AI agent, and a pre-filled issue. Called after a failed
- * resolution, after a successful run that recorded gaps, and unconditionally by --diagnose.
+ * Last line of defense for a whole command: anything that escapes the inner handlers
+ * (a registry that throws, a probe that blows up describing itself) still leaves the user
+ * with `✗ Error: <message>` and exit 1 rather than a Node unhandled-rejection stack trace.
+ */
+async function contain(deps: CliDeps, color: boolean, run: () => Promise<void>): Promise<void> {
+  try {
+    await run();
+  } catch (err) {
+    deps.stderr(error(`${label('Error:', color)} ${(err as Error).message}`, color));
+    deps.setExitCode(1);
+  }
+}
+
+/**
+ * Gaps worth interrupting the user over: each one is a thing llmfit genuinely doesn't
+ * support yet, and each has an agent prompt that would close it. `scrape-failed` is
+ * deliberately absent — a flaky network is not a missing feature, so it keeps its
+ * warn-and-continue behavior and only ever rides along in a bundle someone else asked for.
+ */
+const PROMPTABLE_GAP_KINDS: ReadonlySet<GapKind> = new Set<GapKind>([
+  'unsupported-platform',
+  'no-backend-detected',
+  'unknown-quant',
+  'backend-response-unexpected',
+]);
+
+function promptableGaps(gaps: GapCollector): Gap[] {
+  return gaps.list().filter((gap) => PROMPTABLE_GAP_KINDS.has(gap.kind));
+}
+
+/**
+ * Writes the diagnostics bundle and prints, per promptable gap, the two ways a user can
+ * get it closed: a prompt to hand an AI agent, and a pre-filled issue. Called after a
+ * failed resolution, after a successful run that recorded a promptable gap, and
+ * unconditionally by --diagnose. The bundle always carries *every* recorded gap, including
+ * the non-promptable ones — that is the whole point of a diagnostics bundle.
  */
 async function reportGaps(
   gaps: GapCollector,
@@ -155,34 +188,58 @@ async function reportGaps(
   deps: CliDeps,
   color: boolean
 ): Promise<void> {
-  const list = gaps.list();
   const bundlePath = deps.writeBundle({
     version: deps.version,
     platform: { platform: deps.platform, release: deps.osRelease, arch: deps.osArch },
-    gaps: list,
+    gaps: gaps.list(),
     probeEvidence: probe ? await probe.describe() : null,
   });
 
-  if (list.length === 0) {
-    // The --diagnose-on-a-clean-run case: there is nothing to prompt about, but the user
-    // asked for the bundle, so say where it went and stop.
+  const promptable = promptableGaps(gaps);
+  if (promptable.length === 0) {
+    // --diagnose on a run with nothing (or nothing promptable) to report: the user asked
+    // for the bundle, so say where it went and stop. No "Hit 0 thing(s)" theater.
     deps.stderr(info(`Diagnostics written to ${bundlePath}`, color));
     return;
   }
 
   deps.stderr(
     warn(
-      `Hit ${list.length} thing(s) llmfit doesn't support yet — diagnostics written to ${bundlePath}`,
+      `Hit ${promptable.length} thing(s) llmfit doesn't support yet — diagnostics written to ${bundlePath}`,
       color
     )
   );
   const repo = deps.repoUrl();
-  for (const gap of list) {
+  for (const gap of promptable) {
     deps.stderr('');
     deps.stderr(label('To add support with an AI agent, paste this prompt:', color));
     deps.stderr(agentPromptFor(gap, { bundlePath, repoUrl: repo }));
     deps.stderr(label('Or file it:', color));
     deps.stderr(issueUrlFor(gap, { repoUrl: repo }));
+  }
+}
+
+/**
+ * Writing the bundle can fail on its own (read-only cwd, full disk) — and a diagnostic
+ * that couldn't be written is not a reason to turn an already-printed table into an
+ * unhandled-rejection stack trace. Say what went wrong, leave the command's exit code to
+ * the command: 1 when the run itself failed, 0 when only the diagnostics did.
+ */
+async function reportGapsSafely(
+  gaps: GapCollector,
+  probe: SystemProbe | null,
+  deps: CliDeps,
+  color: boolean
+): Promise<void> {
+  try {
+    await reportGaps(gaps, probe, deps, color);
+  } catch (err) {
+    deps.stderr(
+      error(
+        `${label('Error:', color)} could not write the diagnostics bundle: ${(err as Error).message}`,
+        color
+      )
+    );
   }
 }
 
@@ -248,13 +305,17 @@ export interface CheckCommandOptions {
   diagnose?: boolean;
 }
 
-export async function runCheckCommand(opts: CheckCommandOptions, deps: CliDeps): Promise<void> {
+export function runCheckCommand(opts: CheckCommandOptions, deps: CliDeps): Promise<void> {
+  return contain(deps, opts.color, () => checkCommand(opts, deps));
+}
+
+async function checkCommand(opts: CheckCommandOptions, deps: CliDeps): Promise<void> {
   const color = opts.color;
   const gaps = new GapCollector();
 
   const resolved = await resolve(opts.backend, gaps, deps, color);
   if (!resolved.ok) {
-    if (resolved.reportGaps) await reportGaps(gaps, resolved.probe, deps, color);
+    if (resolved.reportGaps) await reportGapsSafely(gaps, resolved.probe, deps, color);
     deps.setExitCode(1);
     return;
   }
@@ -309,8 +370,11 @@ export async function runCheckCommand(opts: CheckCommandOptions, deps: CliDeps):
     }
   }
 
-  if (gaps.list().length > 0 || opts.diagnose) {
-    await reportGaps(gaps, resolved.probe, deps, color);
+  // Only a genuine unsupported-thing gap earns the bundle-and-prompt interruption. A
+  // scrape that failed already said its piece as a warning above and the run succeeded,
+  // so it must not drop a diagnostics file into the user's cwd on its own.
+  if (promptableGaps(gaps).length > 0 || opts.diagnose) {
+    await reportGapsSafely(gaps, resolved.probe, deps, color);
   }
 }
 
@@ -319,7 +383,15 @@ export interface BenchCommandOptions {
   backend?: string;
 }
 
-export async function runBenchCommand(
+export function runBenchCommand(
+  model: string,
+  opts: BenchCommandOptions,
+  deps: CliDeps
+): Promise<void> {
+  return contain(deps, opts.color, () => benchCommand(model, opts, deps));
+}
+
+async function benchCommand(
   model: string,
   opts: BenchCommandOptions,
   deps: CliDeps
@@ -329,7 +401,7 @@ export async function runBenchCommand(
 
   const resolved = await resolve(opts.backend, gaps, deps, color);
   if (!resolved.ok) {
-    if (resolved.reportGaps) await reportGaps(gaps, resolved.probe, deps, color);
+    if (resolved.reportGaps) await reportGapsSafely(gaps, resolved.probe, deps, color);
     deps.setExitCode(1);
     return;
   }
@@ -361,8 +433,8 @@ export async function runBenchCommand(
     return;
   }
 
-  if (gaps.list().length > 0) {
-    await reportGaps(gaps, resolved.probe, deps, color);
+  if (promptableGaps(gaps).length > 0) {
+    await reportGapsSafely(gaps, resolved.probe, deps, color);
   }
 }
 
@@ -424,5 +496,13 @@ export function createProgram(): Command {
 const isMainModule =
   !!process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMainModule) {
-  createProgram().parseAsync(process.argv);
+  // Commander rejects for things the command bodies never see (an unknown option, an
+  // argument-parsing failure). Without a catch those surface as an unhandled rejection.
+  createProgram()
+    .parseAsync(process.argv)
+    .catch((err: Error) => {
+      const color = shouldUseColor();
+      console.error(error(`${label('Error:', color)} ${err.message}`, color));
+      process.exitCode = 1;
+    });
 }

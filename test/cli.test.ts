@@ -185,6 +185,102 @@ describe('check command wiring', () => {
     expect(parsed.one.rows.length).toBeGreaterThan(0);
   });
 
+  it('a failed remote scrape warns and continues: no bundle, no prompts, exit 0', async () => {
+    const backend = fixtureBackend({
+      remoteCandidates: async () => {
+        throw new Error('getaddrinfo ENOTFOUND ollama.com');
+      },
+    });
+    const h = harness({
+      detectBackends: async () => [
+        { backend, detection: { detected: true, version: '0.0.0', evidence: {} } },
+      ],
+    });
+
+    await runCheckCommand(CHECK_OPTS, h.deps);
+
+    const err = h.stderr.join('\n');
+    expect(h.exit.code).toBe(0);
+    expect(err).toContain('Could not fetch remote model list');
+    // A flaky network is not a missing feature: no funnel, and nothing dropped in the cwd.
+    expect(err).not.toContain('paste this prompt');
+    expect(err).not.toContain('issues/new?');
+    expect(err).not.toContain("doesn't support yet");
+    expect(h.bundles()).toEqual([]);
+    expect(h.stdout.join('\n')).toContain('MODEL');
+  });
+
+  it('--diagnose still records a scrape failure in the bundle, without prompting for it', async () => {
+    const backend = fixtureBackend({
+      remoteCandidates: async () => {
+        throw new Error('getaddrinfo ENOTFOUND ollama.com');
+      },
+    });
+    const h = harness({
+      detectBackends: async () => [
+        { backend, detection: { detected: true, version: '0.0.0', evidence: {} } },
+      ],
+    });
+
+    await runCheckCommand({ ...CHECK_OPTS, diagnose: true }, h.deps);
+
+    expect(h.exit.code).toBe(0);
+    expect(h.bundles()).toHaveLength(1);
+    const bundle = JSON.parse(readFileSync(join(h.bundleDir, h.bundles()[0]), 'utf8'));
+    expect(bundle.gaps.map((g: { kind: string }) => g.kind)).toEqual(['scrape-failed']);
+    expect(h.stderr.join('\n')).not.toContain('paste this prompt');
+  });
+
+  it('an unwritable bundle degrades to a friendly error, leaving a good check at exit 0', async () => {
+    const backend = fixtureBackend();
+    const h = harness({
+      detectBackends: async () => [
+        { backend, detection: { detected: true, version: '0.0.0', evidence: {} } },
+      ],
+      writeBundle: () => {
+        throw new Error('EROFS: read-only file system');
+      },
+    });
+
+    await runCheckCommand({ ...CHECK_OPTS, diagnose: true }, h.deps);
+
+    const err = h.stderr.join('\n');
+    expect(err).toContain('Error:');
+    expect(err).toContain('could not write the diagnostics bundle');
+    expect(err).toContain('EROFS');
+    // The table printed and the check itself succeeded, so the run is still a success.
+    expect(h.stdout.join('\n')).toContain('MODEL');
+    expect(h.exit.code).toBe(0);
+  });
+
+  it('an unwritable bundle on a failed run still exits 1 with a friendly error', async () => {
+    const h = harness({
+      detectBackends: async () => [],
+      writeBundle: () => {
+        throw new Error('EROFS: read-only file system');
+      },
+    });
+
+    await runCheckCommand(CHECK_OPTS, h.deps);
+
+    expect(h.exit.code).toBe(1);
+    expect(h.stderr.join('\n')).toContain('could not write the diagnostics bundle');
+  });
+
+  it('a throwing registry is contained as a friendly error, not an unhandled rejection', async () => {
+    const h = harness({
+      detectBackends: async () => {
+        throw new Error('registry exploded');
+      },
+    });
+
+    await expect(runCheckCommand(CHECK_OPTS, h.deps)).resolves.toBeUndefined();
+
+    expect(h.exit.code).toBe(1);
+    expect(h.stderr.join('\n')).toContain('registry exploded');
+    expect(h.stderr.join('\n')).toContain('Error:');
+  });
+
   it('--backend pins a known backend without requiring detection', async () => {
     const backend = fixtureBackend({ id: 'pinned', displayName: 'Pinned' });
     const h = harness({
