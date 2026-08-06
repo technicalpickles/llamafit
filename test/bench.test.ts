@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { runBench, normalizeModelTarget } from '../src/bench.js';
+import { runBench, normalizeModelTarget, matchesModelTarget } from '../src/bench.js';
 import type { SystemMemoryState } from '../src/probes/types.js';
 import { fixtureBackend, fixtureProbe } from './helpers/fixture-backend.js';
 
@@ -129,6 +129,34 @@ describe('runBench', () => {
     expect(result.loadDurationSeconds).toBe(0);
   });
 
+  it("matches an untagged local model name against an untagged bench target (e.g. llama-server router ids, which never get :latest appended)", async () => {
+    // llama-server router ids from --models-dir/presets have no colon, so
+    // normalizeModelTarget's Ollama-only :latest rule must not be the only match tried —
+    // otherwise a model that IS in the list looks unpulled and a backend with no pull
+    // capability throws "can't pull models" for a model it already has.
+    const result = await runBench('qwen3-30b', {
+      backend: fixtureBackend({
+        localModels: async () => ({
+          models: [
+            {
+              name: 'qwen3-30b',
+              source: 'local',
+              url: null,
+              parameterSizeB: 30.5,
+              quantizationLevel: 'Q4_K_M',
+              diskSizeBytes: 19_000_000_000,
+            },
+          ],
+          skipped: [],
+        }),
+        pull: undefined,
+      }),
+      probe: fixtureProbe(SYSTEM),
+    });
+
+    expect(result.status).toBe('completed');
+  });
+
   it('pulls the model when not already present', async () => {
     let pullCalled = false;
 
@@ -199,5 +227,19 @@ describe('runBench', () => {
   it('normalizes an untagged model name to :latest', () => {
     expect(normalizeModelTarget('llama3.2')).toBe('llama3.2:latest');
     expect(normalizeModelTarget('llama3.2:3b')).toBe('llama3.2:3b');
+  });
+});
+
+describe('matchesModelTarget', () => {
+  it("matches Ollama's :latest-normalized name", () => {
+    expect(matchesModelTarget('llama3.2:latest', 'llama3.2')).toBe(true);
+  });
+
+  it('matches an untagged name reported verbatim (e.g. llama-server router ids)', () => {
+    expect(matchesModelTarget('qwen3-30b', 'qwen3-30b')).toBe(true);
+  });
+
+  it('does not match an unrelated model', () => {
+    expect(matchesModelTarget('gemma3:12b', 'llama3.2')).toBe(false);
   });
 });

@@ -4,7 +4,7 @@ import { arch, release } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { runCheck, type CheckResult } from './check.js';
-import { runBench, normalizeModelTarget, GENERATE_TIMEOUT_MS } from './bench.js';
+import { runBench, matchesModelTarget, GENERATE_TIMEOUT_MS } from './bench.js';
 import { selectProbe } from './probes/registry.js';
 import { allBackends, findBackend, detectBackends } from './backends/registry.js';
 import type { Backend } from './backends/types.js';
@@ -416,9 +416,8 @@ async function benchCommand(
   }
 
   try {
-    const target = normalizeModelTarget(model);
     const { models: local } = await backend.localModels();
-    const existing = local.find((m) => m.name === target);
+    const existing = local.find((m) => matchesModelTarget(m.name, model));
     for (const line of describeBenchPlan(model, existing)) {
       deps.stderr(info(line, color));
     }

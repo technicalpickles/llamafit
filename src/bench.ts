@@ -13,6 +13,16 @@ export function normalizeModelTarget(model: string): string {
   return model.includes(':') ? model : `${model}:latest`;
 }
 
+/** Whether a locally-reported model name refers to the same model the user asked to
+ * bench. Ollama reports untagged pulls back with `:latest` appended, so the normalized
+ * form has to match too — but a backend like llama-server's router mode reports its own
+ * untagged ids verbatim and never appends `:latest`, so the raw name has to match as
+ * well. Accepting either keeps this working for both without assuming one backend's
+ * naming convention. */
+export function matchesModelTarget(localName: string, model: string): boolean {
+  return localName === model || localName === normalizeModelTarget(model);
+}
+
 export interface BenchResult {
   model: string;
   status: 'completed' | 'timed-out';
@@ -37,7 +47,7 @@ export async function runBench(model: string, deps: BenchDeps): Promise<BenchRes
   const notes: string[] = [];
 
   const { models: local } = await backend.localModels();
-  const alreadyPulled = local.some((m) => m.name === target);
+  const alreadyPulled = local.some((m) => matchesModelTarget(m.name, model));
   if (!alreadyPulled) {
     if (!backend.pull) {
       throw new Error(
