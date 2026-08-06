@@ -92,13 +92,12 @@ one.
 `llmfit` is built on a few small interfaces: a backend that talks to an
 inference server, a system probe that reads memory, an estimator that turns
 model metadata into a verdict. Some failures mean one of those genuinely
-doesn't cover your setup yet, an unrecognized quantization string, a
-platform with no `SystemProbe`, no backend it can detect at all, or a
-backend response it couldn't parse. When that happens, `llmfit` writes a
-diagnostics bundle (`llmfit-diagnostics-<timestamp>.json`) with the raw
-evidence it collected, prints a ready-to-paste prompt for handing to an AI
-coding agent, and prints a pre-filled GitHub issue link for handing to a
-human instead.
+doesn't cover your setup yet: an unrecognized quantization string, a
+platform with no `SystemProbe`, or no backend it can detect at all. When
+that happens, `llmfit` writes a diagnostics bundle
+(`llmfit-diagnostics-<timestamp>.json`) with the raw evidence it collected,
+prints a ready-to-paste prompt for handing to an AI coding agent, and
+prints a pre-filled GitHub issue link for handing to a human instead.
 
 A flaky `ollama.com` scrape isn't one of those, it's just a warning on
 stderr, and the run finishes normally. That kind of transient failure only

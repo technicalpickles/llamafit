@@ -1,4 +1,3 @@
-import { loadThresholds } from './data.js';
 import type { CheckResult } from './check.js';
 import type { BenchResult } from './bench.js';
 import { modelPageUrl } from './backends/ollama/client.js';
@@ -76,7 +75,7 @@ export function formatCheckTable(result: CheckResult, opts: FormatOptions = {}):
 
   lines.push(
     '',
-    `${label(`Baseline headroom (total − ${loadThresholds().baselineReserveGb['darwin']}GB macOS reserve):`, color)} ${result.baselineHeadroomGb.toFixed(1)}GB`,
+    `${label(`Baseline headroom (total − ${result.system.totalGb - result.baselineHeadroomGb}GB macOS reserve):`, color)} ${result.baselineHeadroomGb.toFixed(1)}GB`,
     `${label(`Current headroom (total − wired ${result.system.wiredGb.toFixed(1)}GB, approximate):`, color)} ${result.currentHeadroomGb.toFixed(2)}GB`
   );
 
