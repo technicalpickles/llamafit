@@ -61,6 +61,11 @@ export function formatCheckTable(result: CheckResult, opts: FormatOptions = {}):
   if (result.rows.some((r) => !r.quantKnown && r.quantizationLevel !== null)) {
     legend.push('? after QUANT = quantization not reported; assumed for the estimate');
   }
+  if (result.rows.some((r) => r.parameterSizeB === null)) {
+    legend.push(
+      "? = backend couldn't report this model's size (llama-server only exposes GGUF metadata for models loaded at least once)"
+    );
+  }
   if (legend.length > 0) {
     lines.push('', ...legend.map((l) => dim(l, color)));
   }

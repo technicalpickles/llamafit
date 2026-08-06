@@ -103,6 +103,30 @@ describe('formatCheckTable', () => {
     expect(table.split('\n').filter((l) => l.includes('ollama.com')).length).toBe(1);
   });
 
+  it('explains the bare "?" with a legend when a local model has no reported size (e.g. an unloaded llama-server model)', () => {
+    const table = formatCheckTable({
+      ...sampleResult,
+      rows: [
+        {
+          name: 'qwen3-30b',
+          source: 'local',
+          url: null,
+          parameterSizeB: null,
+          quantizationLevel: null,
+          footprintGb: null,
+          estimateSource: 'estimated',
+          quantKnown: false,
+          baselineVerdict: 'unknown',
+          currentVerdict: 'unknown',
+        },
+      ],
+    });
+    const row = table.split('\n').find((l) => l.startsWith('qwen3-30b'))!;
+    // PARAMS(B), QUANT, and FOOTPRINT(GB) all fall back to a bare "?".
+    expect(row.split(/\s{2,}/).filter((cell) => cell === '?')).toHaveLength(3);
+    expect(table).toContain("backend couldn't report this model's size");
+  });
+
   it('shows a measured footprint bare, with no estimate marker', () => {
     const table = formatCheckTable({
       ...sampleResult,
