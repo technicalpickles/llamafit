@@ -16,6 +16,10 @@ describe('backend registry', () => {
     expect(findBackend('ollama')?.id).toBe('ollama');
     expect(findBackend('nope')).toBeNull();
   });
+  it('lists llama-server', () => {
+    expect(allBackends().map((b) => b.id)).toContain('llama-server');
+    expect(findBackend('llama-server')?.id).toBe('llama-server');
+  });
   it('detectBackends keeps only detected ones', async () => {
     const hits = await detectBackends([fakeBackend('a', true), fakeBackend('b', false)]);
     expect(hits.map((h) => h.backend.id)).toEqual(['a']);

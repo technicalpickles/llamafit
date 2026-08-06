@@ -1,5 +1,13 @@
-import type { GenerateResult, LocalModels, ModelInfo } from '../../types.js';
+import type { Detection, GenerateResult, LocalModels, ModelInfo } from '../../types.js';
+import type { Backend } from '../types.js';
 import type { LlamaServerCompletionResponse, LlamaServerModelsResponse } from './client.js';
+import {
+  LLAMA_SERVER_BASE_URL,
+  completion,
+  fetchModels,
+  fetchProps,
+  unloadModel,
+} from './client.js';
 
 /** llama-server reports quantization as the human string from llama.cpp's
  * llama_ftype_name() (src/llama-model-loader.cpp). This maps each known string
@@ -83,3 +91,58 @@ export function mapCompletionToGenerate(res: LlamaServerCompletionResponse): Gen
     totalDurationSeconds: (prompt_ms + predicted_ms) / 1000,
   };
 }
+
+async function detect(): Promise<Detection> {
+  try {
+    const res = await fetch(`${LLAMA_SERVER_BASE_URL}/health`);
+    if (!res.ok) {
+      return {
+        detected: false,
+        version: null,
+        evidence: { baseUrl: LLAMA_SERVER_BASE_URL, error: `server returned ${res.status}` },
+      };
+    }
+    // Bare GET /props (no ?model=) works in router mode; version is a
+    // nice-to-have, not a gate — /health alone decides detection.
+    let version: string | null = null;
+    try {
+      version = (await fetchProps()).build_info ?? null;
+    } catch {
+      version = null;
+    }
+    return { detected: true, version, evidence: { baseUrl: LLAMA_SERVER_BASE_URL } };
+  } catch (err) {
+    return {
+      detected: false,
+      version: null,
+      evidence: { baseUrl: LLAMA_SERVER_BASE_URL, error: (err as Error).message },
+    };
+  }
+}
+
+async function localModels(): Promise<LocalModels> {
+  return mapModelsToLocalModels(await fetchModels());
+}
+
+async function generateResult(
+  model: string,
+  prompt: string,
+  timeoutMs?: number
+): Promise<GenerateResult | null> {
+  const response = await completion(model, prompt, timeoutMs);
+  if (response === null) return null;
+  return mapCompletionToGenerate(response);
+}
+
+/** Router mode only. loadedModels() is deliberately absent: no llama-server
+ * endpoint reports real per-model VRAM, and faking it from file size would
+ * poison bench.ts's calibration provenance (see docs/adapters.md).
+ * remoteCandidates() and pull() are tracked fast-follows. */
+export const llamaServerBackend: Backend = {
+  id: 'llama-server',
+  displayName: 'llama-server',
+  detect,
+  localModels,
+  generate: generateResult,
+  unload: unloadModel,
+};

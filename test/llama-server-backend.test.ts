@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describeBackendConformance } from './conformance/backend.js';
 import {
   normalizeFtype,
   mapModelsToLocalModels,
   mapCompletionToGenerate,
+  llamaServerBackend,
 } from '../src/backends/llama-server/index.js';
 import type {
   LlamaServerModelsResponse,
@@ -106,5 +108,104 @@ describe('mapCompletionToGenerate', () => {
     expect(result.evalDurationSeconds).toBeCloseTo(0.071907, 6);
     expect(result.totalDurationSeconds).toBeCloseTo(0.089385, 6);
     expect(result.loadDurationSeconds).toBeNull();
+  });
+});
+
+const health = loadFixture<object>('llama-server-health.json');
+const props = loadFixture<object>('llama-server-props-router-no-model.json');
+const modelsLoaded = loadFixture<LlamaServerModelsResponse>('llama-server-models-loaded.json');
+const completionSuccess = loadFixture<LlamaServerCompletionResponse>(
+  'llama-server-completion-success.json'
+);
+const unloadSuccess = loadFixture<object>('llama-server-models-unload-success.json');
+
+let originalFetch: typeof fetch;
+
+beforeEach(() => {
+  originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (url.includes('/health')) {
+      return new Response(JSON.stringify(health), { status: 200 });
+    }
+    if (url.includes('/props')) {
+      return new Response(JSON.stringify(props), { status: 200 });
+    }
+    if (url.includes('/models/unload')) {
+      return new Response(JSON.stringify(unloadSuccess), { status: 200 });
+    }
+    if (url.includes('/models')) {
+      return new Response(JSON.stringify(modelsLoaded), { status: 200 });
+    }
+    if (url.includes('/completion')) {
+      return new Response(JSON.stringify(completionSuccess), { status: 200 });
+    }
+    throw new Error(`Unhandled fetch in test stub: ${url}`);
+  }) as typeof fetch;
+});
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
+
+describeBackendConformance('llama-server', async () => llamaServerBackend);
+
+describe('llamaServerBackend', () => {
+  it('detect() reports detected with build_info as version', async () => {
+    const detection = await llamaServerBackend.detect();
+    expect(detection.detected).toBe(true);
+    expect(detection.version).toBe('b10280-61881b1f7');
+    expect(detection.evidence).toHaveProperty('baseUrl');
+  });
+
+  it('detect() reports unreachable without throwing', async () => {
+    globalThis.fetch = (() => {
+      throw new Error('connect ECONNREFUSED 127.0.0.1:8080');
+    }) as typeof fetch;
+    const detection = await llamaServerBackend.detect();
+    expect(detection.detected).toBe(false);
+    expect(detection.evidence).toHaveProperty('error');
+  });
+
+  it('detect() still detects when /props fails — version is best-effort', async () => {
+    const healthOnlyFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/props')) {
+        return new Response('unavailable', { status: 500 });
+      }
+      return healthOnlyFetch(input);
+    }) as typeof fetch;
+    const detection = await llamaServerBackend.detect();
+    expect(detection.detected).toBe(true);
+    expect(detection.version).toBeNull();
+  });
+
+  it('detect() reports a non-200 /health as not detected', async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ error: { code: 503, message: 'Loading model' } }), {
+        status: 503,
+      })) as typeof fetch;
+    const detection = await llamaServerBackend.detect();
+    expect(detection.detected).toBe(false);
+  });
+
+  it('localModels() maps through the fixture', async () => {
+    const { models } = await llamaServerBackend.localModels();
+    expect(models[0].name).toBe('Qwen/Qwen2.5-0.5B-Instruct-GGUF:Q4_K_M');
+    expect(models[0].quantizationLevel).toBe('Q4_K_M');
+  });
+
+  it('generate() maps the completion timings', async () => {
+    const result = await llamaServerBackend.generate('Qwen/Qwen2.5-0.5B-Instruct-GGUF:Q4_K_M', 'hi');
+    expect(result?.evalCount).toBe(16);
+    expect(result?.loadDurationSeconds).toBeNull();
+  });
+
+  it('does not declare loadedModels, remoteCandidates, or pull', () => {
+    expect('loadedModels' in llamaServerBackend).toBe(false);
+    expect('remoteCandidates' in llamaServerBackend).toBe(false);
+    expect('pull' in llamaServerBackend).toBe(false);
+    expect(typeof llamaServerBackend.unload).toBe('function');
   });
 });

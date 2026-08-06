@@ -92,7 +92,7 @@ describe('check command wiring', () => {
     expect(h.bundles()).toHaveLength(1);
     const bundle = JSON.parse(readFileSync(join(h.bundleDir, h.bundles()[0]), 'utf8'));
     expect(bundle.gaps[0].kind).toBe('no-backend-detected');
-    expect(bundle.gaps[0].evidence.probed).toEqual(['ollama']);
+    expect(bundle.gaps[0].evidence.probed).toEqual(['ollama', 'llama-server']);
     // Nothing on stdout: a failed run must not emit a half-table into a pipeline.
     expect(h.stdout).toEqual([]);
   });

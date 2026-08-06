@@ -1,8 +1,9 @@
 import { ollamaBackend } from './ollama/index.js';
+import { llamaServerBackend } from './llama-server/index.js';
 import type { Backend } from './types.js';
 import type { Detection } from '../types.js';
 
-const BACKENDS: Backend[] = [ollamaBackend];
+const BACKENDS: Backend[] = [ollamaBackend, llamaServerBackend];
 
 export function allBackends(): Backend[] {
   return [...BACKENDS];
