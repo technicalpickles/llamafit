@@ -321,9 +321,12 @@ async function checkCommand(opts: CheckCommandOptions, deps: CliDeps): Promise<v
     return;
   }
 
+  // Each backend is checked independently — one backend throwing (a dead connection, a
+  // malformed response) must not drop the results of every other backend that succeeded.
+  // Only when *every* backend fails does the whole run count as a failure.
   const results: Array<{ backend: Backend; result: CheckResult }> = [];
-  try {
-    for (const backend of resolved.backends) {
+  for (const backend of resolved.backends) {
+    try {
       results.push({
         backend,
         result: await runCheck(opts.query, {
@@ -333,9 +336,17 @@ async function checkCommand(opts: CheckCommandOptions, deps: CliDeps): Promise<v
           gaps,
         }),
       });
+    } catch (err) {
+      deps.stderr(
+        error(
+          `${label('Error:', color)} ${backend.displayName}: ${(err as Error).message}`,
+          color
+        )
+      );
     }
-  } catch (err) {
-    deps.stderr(error(`${label('Error:', color)} ${(err as Error).message}`, color));
+  }
+
+  if (results.length === 0) {
     deps.setExitCode(1);
     return;
   }

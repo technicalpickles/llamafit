@@ -281,6 +281,66 @@ describe('check command wiring', () => {
     expect(h.stderr.join('\n')).toContain('Error:');
   });
 
+  it('one backend throwing warns and is skipped; the other backend still renders and exit stays 0', async () => {
+    const good = fixtureBackend({ id: 'good', displayName: 'Good Backend' });
+    const bad = fixtureBackend({
+      id: 'bad',
+      displayName: 'Bad Backend',
+      localModels: async () => {
+        throw new Error('connection refused');
+      },
+    });
+    const h = harness({
+      detectBackends: async () => [
+        { backend: bad, detection: { detected: true, version: '0.0.0', evidence: {} } },
+        { backend: good, detection: { detected: true, version: '0.0.0', evidence: {} } },
+      ],
+    });
+
+    await runCheckCommand(CHECK_OPTS, h.deps);
+
+    const err = h.stderr.join('\n');
+    expect(err).toContain('Bad Backend');
+    expect(err).toContain('connection refused');
+    // Only one backend survived, so it renders as the normal single-backend table (no
+    // per-backend heading) — the point is that it renders at all instead of being
+    // dropped along with the backend that threw.
+    const out = h.stdout.join('\n');
+    expect(out).toContain('MODEL');
+    expect(h.exit.code).toBe(0);
+  });
+
+  it('every backend throwing exits 1 and prints nothing on stdout', async () => {
+    const first = fixtureBackend({
+      id: 'one',
+      displayName: 'Backend One',
+      localModels: async () => {
+        throw new Error('boom one');
+      },
+    });
+    const second = fixtureBackend({
+      id: 'two',
+      displayName: 'Backend Two',
+      localModels: async () => {
+        throw new Error('boom two');
+      },
+    });
+    const h = harness({
+      detectBackends: async () => [
+        { backend: first, detection: { detected: true, version: '0.0.0', evidence: {} } },
+        { backend: second, detection: { detected: true, version: '0.0.0', evidence: {} } },
+      ],
+    });
+
+    await runCheckCommand(CHECK_OPTS, h.deps);
+
+    const err = h.stderr.join('\n');
+    expect(err).toContain('boom one');
+    expect(err).toContain('boom two');
+    expect(h.stdout).toEqual([]);
+    expect(h.exit.code).toBe(1);
+  });
+
   it('--backend pins a known backend without requiring detection', async () => {
     const backend = fixtureBackend({ id: 'pinned', displayName: 'Pinned' });
     const h = harness({
