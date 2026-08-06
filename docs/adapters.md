@@ -317,6 +317,26 @@ const BACKENDS: Backend[] = [ollamaBackend];
 this array — nothing else needs to change for your backend to be picked up
 by `--backend <id>` or by autodetection.
 
+### Second implementation: `src/backends/llama-server/`
+
+llama.cpp's `llama-server` (router mode only — classic single-instance mode
+is out of scope) is the example of a deliberately degraded backend: it
+implements `detect()`, `localModels()`, `generate()`, and `unload()`, and
+omits the rest. Two of its behaviors are worth knowing if you're adapting
+another llama.cpp-family server:
+
+- `GET /models` includes GGUF metadata (`meta`: `n_params`, `size`, `ftype`)
+  only for models that have been loaded at least once this server lifetime,
+  and it disappears again after unload. `localModels()` therefore reports
+  `parameterSizeB`/`quantizationLevel`/`diskSizeBytes` as `null` for
+  never-loaded models — a real, disclosed gap: the router genuinely cannot
+  know an unloaded model's footprint without loading it.
+- `loadedModels()` is omitted rather than faked. No llama-server endpoint
+  reports real per-model VRAM, and deriving a number from on-disk file size
+  would mislabel check rows as `estimateSource: 'measured'` and poison
+  `bench`-driven calibration provenance. Same principle as probes: prefer
+  under-reporting than fabricating.
+
 ## 4. Quantization table
 
 `data/quants.json`:
