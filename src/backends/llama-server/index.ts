@@ -1,3 +1,6 @@
+import type { GenerateResult, LocalModels, ModelInfo } from '../../types.js';
+import type { LlamaServerCompletionResponse, LlamaServerModelsResponse } from './client.js';
+
 /** llama-server reports quantization as the human string from llama.cpp's
  * llama_ftype_name() (src/llama-model-loader.cpp). This maps each known string
  * to the canonical id form data/quants.json uses. Exact-string map rather than
@@ -50,4 +53,33 @@ const GUESSED_PREFIX = '(guessed) ';
 export function normalizeFtype(ftype: string): string {
   const stripped = ftype.startsWith(GUESSED_PREFIX) ? ftype.slice(GUESSED_PREFIX.length) : ftype;
   return FTYPE_TO_QUANT[stripped] ?? stripped;
+}
+
+/** Every model the router knows about is 'local' — an unloaded-but-known model
+ * is still installed, just not resident. Size/quant fields come from `meta`,
+ * which the API includes only for models loaded at least once this server
+ * lifetime; without it they're null — a real, disclosed gap (the router
+ * genuinely can't know an unloaded model's footprint without loading it). */
+export function mapModelsToLocalModels(res: LlamaServerModelsResponse): LocalModels {
+  const models: ModelInfo[] = res.data.map((model) => ({
+    name: model.id,
+    source: 'local',
+    url: null,
+    parameterSizeB: model.meta ? model.meta.n_params / 1e9 : null,
+    quantizationLevel: model.meta ? normalizeFtype(model.meta.ftype) : null,
+    diskSizeBytes: model.meta ? model.meta.size : null,
+  }));
+  return { models, skipped: [] };
+}
+
+export function mapCompletionToGenerate(res: LlamaServerCompletionResponse): GenerateResult {
+  const { prompt_ms, predicted_ms, predicted_n } = res.timings;
+  return {
+    evalCount: predicted_n,
+    evalDurationSeconds: predicted_ms / 1000,
+    // Router-mode auto-load latency is absorbed into overall request latency,
+    // not broken out anywhere in the response.
+    loadDurationSeconds: null,
+    totalDurationSeconds: (prompt_ms + predicted_ms) / 1000,
+  };
 }

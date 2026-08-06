@@ -1,5 +1,18 @@
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
-import { normalizeFtype } from '../src/backends/llama-server/index.js';
+import {
+  normalizeFtype,
+  mapModelsToLocalModels,
+  mapCompletionToGenerate,
+} from '../src/backends/llama-server/index.js';
+import type {
+  LlamaServerModelsResponse,
+  LlamaServerCompletionResponse,
+} from '../src/backends/llama-server/client.js';
+
+function loadFixture<T>(name: string): T {
+  return JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf-8'));
+}
 
 describe('normalizeFtype', () => {
   // Each case is a real string from llama_ftype_name() in llama.cpp's
@@ -49,5 +62,49 @@ describe('normalizeFtype', () => {
 
   it('passes unknown strings through verbatim for the unknown-quant gap flow', () => {
     expect(normalizeFtype('Q9_Z - Fancy')).toBe('Q9_Z - Fancy');
+  });
+});
+
+describe('mapModelsToLocalModels', () => {
+  it('maps a loaded model with meta to a fully-populated ModelInfo', () => {
+    const fixture = loadFixture<LlamaServerModelsResponse>('llama-server-models-loaded.json');
+    const { models, skipped } = mapModelsToLocalModels(fixture);
+    expect(skipped).toEqual([]);
+    expect(models).toHaveLength(1);
+    expect(models[0]).toEqual({
+      name: 'Qwen/Qwen2.5-0.5B-Instruct-GGUF:Q4_K_M',
+      source: 'local',
+      url: null,
+      parameterSizeB: 630167424 / 1e9,
+      quantizationLevel: 'Q4_K_M',
+      diskSizeBytes: 485452288,
+    });
+  });
+
+  it('reports null size/quant for a never-loaded model (no meta)', () => {
+    const fixture = loadFixture<LlamaServerModelsResponse>('llama-server-models-unloaded.json');
+    const { models } = mapModelsToLocalModels(fixture);
+    expect(models[0].parameterSizeB).toBeNull();
+    expect(models[0].quantizationLevel).toBeNull();
+    expect(models[0].diskSizeBytes).toBeNull();
+  });
+
+  it('reports null again after unload — meta does not persist', () => {
+    const fixture = loadFixture<LlamaServerModelsResponse>('llama-server-models-after-unload.json');
+    const { models } = mapModelsToLocalModels(fixture);
+    expect(models[0].parameterSizeB).toBeNull();
+    expect(models[0].quantizationLevel).toBeNull();
+    expect(models[0].diskSizeBytes).toBeNull();
+  });
+});
+
+describe('mapCompletionToGenerate', () => {
+  it('maps the timings block from a captured completion', () => {
+    const fixture = loadFixture<LlamaServerCompletionResponse>('llama-server-completion-success.json');
+    const result = mapCompletionToGenerate(fixture);
+    expect(result.evalCount).toBe(16);
+    expect(result.evalDurationSeconds).toBeCloseTo(0.071907, 6);
+    expect(result.totalDurationSeconds).toBeCloseTo(0.089385, 6);
+    expect(result.loadDurationSeconds).toBeNull();
   });
 });
