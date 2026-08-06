@@ -85,8 +85,16 @@ export async function runBench(model: string, deps: BenchDeps): Promise<BenchRes
     }
     memoryAfter = await probe.read();
   } finally {
+    // A failed unload (e.g. llama-server 400s when the model isn't actually loaded,
+    // such as after a timed-out generate) must not replace whatever this try block was
+    // about to return/throw — that would turn a legitimate result or error into a
+    // confusing unload failure instead. Note it and move on.
     if (backend.unload) {
-      await backend.unload(model);
+      try {
+        await backend.unload(model);
+      } catch (err) {
+        notes.push(`${backend.displayName} failed to unload '${model}': ${(err as Error).message}`);
+      }
     }
   }
 

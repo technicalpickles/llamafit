@@ -204,6 +204,39 @@ describe('runBench', () => {
     ).rejects.toThrow("Fixture can't pull models — pull 'nonexistent-model' yourself, then re-run");
   });
 
+  it("adds a note (and keeps the result) when unload itself throws, instead of masking the outcome", async () => {
+    // llama-server 400s an unload call for a model it considers not loaded — a real case
+    // when generate() timed out before the model finished loading. That must not turn a
+    // legitimate (if degraded) result into a hard throw.
+    const result = await runBench('gemma3:12b', {
+      backend: fixtureBackend({
+        unload: async () => {
+          throw new Error('model is not found');
+        },
+      }),
+      probe: fixtureProbe(SYSTEM),
+    });
+
+    expect(result.status).toBe('completed');
+    expect(result.notes).toEqual(["Fixture failed to unload 'gemma3:12b': model is not found"]);
+  });
+
+  it('propagates the original error, not the unload failure, when both generate and unload fail', async () => {
+    await expect(
+      runBench('gemma3:12b', {
+        backend: fixtureBackend({
+          generate: async () => {
+            throw new Error('generate failed');
+          },
+          unload: async () => {
+            throw new Error('model is not found');
+          },
+        }),
+        probe: fixtureProbe(SYSTEM),
+      })
+    ).rejects.toThrow('generate failed');
+  });
+
   it('still unloads when generate throws', async () => {
     let unloadCalled = false;
 
