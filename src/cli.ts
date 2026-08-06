@@ -441,8 +441,8 @@ async function benchCommand(
 export function createProgram(): Command {
   const program = new Command();
   program
-    .name('ollama-scope')
-    .description("Right-size Ollama models for this machine's memory and quantization");
+    .name('llmfit')
+    .description('Which local LLMs actually fit this machine?');
 
   program
     .command('check')

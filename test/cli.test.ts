@@ -13,9 +13,9 @@ import type { SystemMemoryState } from '../src/probes/types.js';
 import { fixtureBackend, fixtureProbe } from './helpers/fixture-backend.js';
 
 describe('createProgram', () => {
-  it('names the program ollama-scope', () => {
+  it('names the program llmfit', () => {
     const program = createProgram();
-    expect(program.name()).toBe('ollama-scope');
+    expect(program.name()).toBe('llmfit');
   });
 
   it('has a non-empty description', () => {
