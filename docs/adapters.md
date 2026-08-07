@@ -337,8 +337,8 @@ by `--backend <id>` or by autodetection.
 
 llama.cpp's `llama-server` (router mode only — classic single-instance mode
 is out of scope) is the example of a deliberately degraded backend: it
-implements `detect()`, `localModels()`, `generate()`, `unload()`, and
-`remoteCandidates()` (backed by Hugging Face Hub search — see
+implements `detect()`, `localModels()`, `generate()`, `unload()`, `pull()`,
+and `remoteCandidates()` (backed by Hugging Face Hub search — see
 `src/hf/discovery.ts`), but omits `loadedModels()`. Two of its behaviors are
 worth knowing if you're adapting another llama.cpp-family server:
 

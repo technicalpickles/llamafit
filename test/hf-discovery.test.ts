@@ -67,6 +67,12 @@ describe('parseQuantsFromSiblings', () => {
     expect(parseQuantsFromSiblings(['mmproj-F16.gguf', 'model-Q4_K_M.gguf'])).toEqual(['Q4_K_M']);
   });
 
+  it('skips mmproj projector files nested in a subdirectory', () => {
+    expect(parseQuantsFromSiblings(['subdir/mmproj-F16.gguf', 'model-Q4_K_M.gguf'])).toEqual([
+      'Q4_K_M',
+    ]);
+  });
+
   it('skips non-gguf and unparseable filenames rather than guessing', () => {
     expect(parseQuantsFromSiblings(['README.md', 'config.json', 'model.gguf'])).toEqual([]);
   });
@@ -148,5 +154,15 @@ describe('searchGgufModels', () => {
   it('throws a status-aware error on other non-200s', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 500 })));
     await expect(searchGgufModels('')).rejects.toThrow(/500/);
+  });
+
+  it('rejects when HF returns 200 with non-array JSON', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: 'whatever' }), { status: 200 })
+      )
+    );
+    await expect(searchGgufModels('')).rejects.toThrow(/non-array|unexpected/i);
   });
 });

@@ -187,6 +187,6 @@ export async function runCheck(query: string, deps: CheckDeps): Promise<CheckRes
     baselineHeadroomGb,
     currentHeadroomGb,
     scrapeWarning,
-    remoteGuidance: remoteCandidates.some((c) => c.signals != null) ? REMOTE_GUIDANCE : null,
+    remoteGuidance: remoteRows.some((r) => r.signals != null) ? REMOTE_GUIDANCE : null,
   };
 }

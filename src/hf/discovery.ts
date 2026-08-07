@@ -41,8 +41,11 @@ export function parseQuantsFromSiblings(filenames: string[]): string[] {
   const quants: string[] = [];
   for (const name of filenames) {
     // mmproj files are multimodal projectors riding along in the repo; their
-    // F16/BF16 token describes the projector, not the model.
-    if (name.startsWith('mmproj')) continue;
+    // F16/BF16 token describes the projector, not the model. Match on the
+    // basename so subdirectory paths (e.g. subdir/mmproj-F16.gguf) are
+    // still excluded.
+    const basename = name.split('/').pop() ?? name;
+    if (basename.startsWith('mmproj')) continue;
     const match = QUANT_RE.exec(name);
     if (!match) continue;
     const quant = match[1].toUpperCase();
@@ -110,6 +113,9 @@ export async function searchGgufModels(
   if (!res.ok) {
     throw new Error(`Hugging Face API returned ${res.status} for ${url}`);
   }
-  const hits = (await res.json()) as HfModelHit[];
-  return hits.map(mapHitToCandidate);
+  const hits = await res.json();
+  if (!Array.isArray(hits)) {
+    throw new Error(`Hugging Face API returned unexpected non-array JSON for ${url}`);
+  }
+  return (hits as HfModelHit[]).map(mapHitToCandidate);
 }

@@ -35,6 +35,7 @@ const sampleResult: CheckResult = {
   baselineHeadroomGb: 16,
   currentHeadroomGb: 0.14,
   scrapeWarning: null,
+  remoteGuidance: null,
 };
 
 describe('formatCheckTable', () => {

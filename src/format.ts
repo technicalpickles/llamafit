@@ -83,7 +83,7 @@ export function formatCheckTable(result: CheckResult, opts: FormatOptions = {}):
     }
   }
 
-  if (result.remoteGuidance !== null) {
+  if (result.remoteGuidance != null) {
     lines.push(
       '',
       dim('Remote candidates are unvetted — see remoteGuidance in --json for how to judge sources.', color)
