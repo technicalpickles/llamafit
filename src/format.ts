@@ -1,5 +1,6 @@
 import type { CheckResult } from './check.js';
 import type { BenchResult } from './bench.js';
+import type { PullProgress } from './backends/types.js';
 import { colorizeVerdict, colorizeBenchStatus, label, dim, warn } from './colors.js';
 
 export interface FormatOptions {
@@ -147,4 +148,12 @@ export function formatBenchResult(result: BenchResult, opts: FormatOptions = {})
   }
 
   return lines.join('\n');
+}
+
+/** Download progress for the bench spinner: decimal GB to one decimal place,
+ * matching the table/bench output conventions in this file. */
+export function formatPullProgress(p: PullProgress): string {
+  const gb = (bytes: number) => (bytes / 1e9).toFixed(1);
+  const pct = p.totalBytes > 0 ? Math.round((p.doneBytes / p.totalBytes) * 100) : 0;
+  return `${gb(p.doneBytes)}/${gb(p.totalBytes)} GB (${pct}%)`;
 }

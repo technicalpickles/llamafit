@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { formatCheckTable, formatCheckJson } from '../src/format.js';
+import { formatCheckTable, formatCheckJson, formatPullProgress } from '../src/format.js';
 import type { CheckResult } from '../src/check.js';
 import { formatBenchResult } from '../src/format.js';
 import type { BenchResult } from '../src/bench.js';
+import type { PullProgress } from '../src/backends/types.js';
 
 const sampleResult: CheckResult = {
   rows: [
@@ -301,5 +302,17 @@ describe('formatBenchResult', () => {
 
     const withUrl = formatBenchResult(result, { modelUrl: 'https://ollama.com/library/qwen3' });
     expect(withUrl).toContain('https://ollama.com/library/qwen3');
+  });
+});
+
+describe('formatPullProgress', () => {
+  it('renders done/total in decimal GB with a percentage', () => {
+    expect(formatPullProgress({ doneBytes: 1_200_000_000, totalBytes: 2_700_000_000 })).toBe(
+      '1.2/2.7 GB (44%)'
+    );
+  });
+
+  it('shows 0% instead of dividing by zero when total is unknown', () => {
+    expect(formatPullProgress({ doneBytes: 0, totalBytes: 0 })).toBe('0.0/0.0 GB (0%)');
   });
 });
