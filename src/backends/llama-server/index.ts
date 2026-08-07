@@ -1,5 +1,6 @@
 import type { Detection, GenerateResult, LocalModels, ModelInfo } from '../../types.js';
-import type { Backend } from '../types.js';
+import { searchGgufModels, type HfCandidate } from '../../hf/discovery.js';
+import type { Backend, RemoteCandidateOptions } from '../types.js';
 import type { LlamaServerCompletionResponse, LlamaServerModelsResponse } from './client.js';
 import {
   LLAMA_SERVER_BASE_URL,
@@ -125,6 +126,31 @@ async function localModels(): Promise<LocalModels> {
   return mapModelsToLocalModels(await fetchModels());
 }
 
+export function mapCandidatesToModelInfo(candidates: HfCandidate[]): ModelInfo[] {
+  return candidates.map((c) => ({
+    name: c.repoId,
+    source: 'remote',
+    url: c.url,
+    parameterSizeB: c.parameterSizeB,
+    // Repos ship many quants; no single quant describes the repo. The
+    // estimator's fallback covers the estimate, availableQuants covers pulling.
+    quantizationLevel: null,
+    diskSizeBytes: null,
+    author: c.author,
+    availableQuants: c.availableQuants,
+    signals: c.signals,
+  }));
+}
+
+async function remoteCandidates(
+  query = '',
+  opts: RemoteCandidateOptions = {}
+): Promise<ModelInfo[]> {
+  return mapCandidatesToModelInfo(
+    await searchGgufModels(query, { maxParameterSizeB: opts.maxParameterSizeB })
+  );
+}
+
 async function generateResult(
   model: string,
   prompt: string,
@@ -137,14 +163,14 @@ async function generateResult(
 
 /** Router mode only. loadedModels() is deliberately absent: no llama-server
  * endpoint reports real per-model VRAM, and faking it from file size would
- * poison bench.ts's calibration provenance (see docs/adapters.md).
- * remoteCandidates() is a tracked fast-follow. */
+ * poison bench.ts's calibration provenance (see docs/adapters.md). */
 export const llamaServerBackend: Backend = {
   id: 'llama-server',
   displayName: 'llama-server',
   detect,
   localModels,
   generate: generateResult,
+  remoteCandidates,
   pull: pullModel,
   unload: unloadModel,
 };

@@ -5,12 +5,14 @@ import {
   normalizeFtype,
   mapModelsToLocalModels,
   mapCompletionToGenerate,
+  mapCandidatesToModelInfo,
   llamaServerBackend,
 } from '../src/backends/llama-server/index.js';
 import type {
   LlamaServerModelsResponse,
   LlamaServerCompletionResponse,
 } from '../src/backends/llama-server/client.js';
+import type { HfCandidate } from '../src/hf/discovery.js';
 
 function loadFixture<T>(name: string): T {
   return JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf-8'));
@@ -97,6 +99,34 @@ describe('mapModelsToLocalModels', () => {
     expect(models[0].parameterSizeB).toBeNull();
     expect(models[0].quantizationLevel).toBeNull();
     expect(models[0].diskSizeBytes).toBeNull();
+  });
+});
+
+describe('mapCandidatesToModelInfo', () => {
+  const candidate: HfCandidate = {
+    repoId: 'unsloth/Qwen3.5-9B-GGUF',
+    author: 'unsloth',
+    url: 'https://huggingface.co/unsloth/Qwen3.5-9B-GGUF',
+    parameterSizeB: 8.95,
+    availableQuants: ['Q4_K_M', 'Q8_0'],
+    signals: { downloads: 986097, likes: 120, trendingScore: 13, lastModified: '2026-08-01T00:00:00.000Z' },
+  };
+
+  it('maps a candidate to a remote ModelInfo', () => {
+    const [info] = mapCandidatesToModelInfo([candidate]);
+    expect(info).toEqual({
+      name: 'unsloth/Qwen3.5-9B-GGUF',
+      source: 'remote',
+      url: 'https://huggingface.co/unsloth/Qwen3.5-9B-GGUF',
+      parameterSizeB: 8.95,
+      // Repos ship many quants; no single quant describes the repo. The
+      // estimator's fallback covers the estimate, availableQuants covers pulling.
+      quantizationLevel: null,
+      diskSizeBytes: null,
+      author: 'unsloth',
+      availableQuants: ['Q4_K_M', 'Q8_0'],
+      signals: candidate.signals,
+    });
   });
 });
 
@@ -202,9 +232,9 @@ describe('llamaServerBackend', () => {
     expect(result?.loadDurationSeconds).toBeNull();
   });
 
-  it('declares pull and unload, but not loadedModels or remoteCandidates', () => {
+  it('declares pull, unload, and remoteCandidates, but not loadedModels', () => {
     expect('loadedModels' in llamaServerBackend).toBe(false);
-    expect('remoteCandidates' in llamaServerBackend).toBe(false);
+    expect(typeof llamaServerBackend.remoteCandidates).toBe('function');
     expect(typeof llamaServerBackend.pull).toBe('function');
     expect(typeof llamaServerBackend.unload).toBe('function');
   });

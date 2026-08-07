@@ -212,6 +212,11 @@ export interface PullProgress {
   totalBytes: number;
 }
 
+export interface RemoteCandidateOptions {
+  /** Server-side size filter — candidates above this are never fetched. */
+  maxParameterSizeB?: number;
+}
+
 export interface Backend {
   id: string;
   displayName: string;
@@ -220,7 +225,7 @@ export interface Backend {
   /** Resolves null on timeout — a meaningful result, not an error. */
   generate(model: string, prompt: string, timeoutMs?: number): Promise<GenerateResult | null>;
   // Optional capabilities — absent method = backend can't do it; callers degrade and say so.
-  remoteCandidates?(query?: string): Promise<ModelInfo[]>;
+  remoteCandidates?(query?: string, opts?: RemoteCandidateOptions): Promise<ModelInfo[]>;
   loadedModels?(): Promise<LoadedModel[]>;
   /** onProgress is best-effort UI plumbing: it may never fire (a download can
    * complete before any progress event), and implementations need not guard
@@ -231,7 +236,9 @@ export interface Backend {
 ```
 
 `Detection`, `LocalModels`, `ModelInfo`, `LoadedModel`, and `GenerateResult`
-are all defined in `src/types.ts`.
+are all defined in `src/types.ts`. `opts.maxParameterSizeB` on
+`remoteCandidates` is a server-side size filter — backends that can't apply
+it upstream (or don't support remote discovery at all) are free to ignore it.
 
 ### Required vs. optional, and what absence means
 
@@ -330,9 +337,10 @@ by `--backend <id>` or by autodetection.
 
 llama.cpp's `llama-server` (router mode only — classic single-instance mode
 is out of scope) is the example of a deliberately degraded backend: it
-implements `detect()`, `localModels()`, `generate()`, and `unload()`, and
-omits the rest. Two of its behaviors are worth knowing if you're adapting
-another llama.cpp-family server:
+implements `detect()`, `localModels()`, `generate()`, `unload()`, and
+`remoteCandidates()` (backed by Hugging Face Hub search — see
+`src/hf/discovery.ts`), but omits `loadedModels()`. Two of its behaviors are
+worth knowing if you're adapting another llama.cpp-family server:
 
 - `GET /models` includes GGUF metadata (`meta`: `n_params`, `size`, `ftype`)
   only for models that have been loaded at least once this server lifetime,

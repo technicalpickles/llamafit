@@ -6,6 +6,11 @@ export interface PullProgress {
   totalBytes: number;
 }
 
+export interface RemoteCandidateOptions {
+  /** Server-side size filter — candidates above this are never fetched. */
+  maxParameterSizeB?: number;
+}
+
 export interface Backend {
   id: string;
   displayName: string;
@@ -14,7 +19,7 @@ export interface Backend {
   /** Resolves null on timeout — a meaningful result, not an error. */
   generate(model: string, prompt: string, timeoutMs?: number): Promise<GenerateResult | null>;
   // Optional capabilities — absent method = backend can't do it; callers degrade and say so.
-  remoteCandidates?(query?: string): Promise<ModelInfo[]>;
+  remoteCandidates?(query?: string, opts?: RemoteCandidateOptions): Promise<ModelInfo[]>;
   loadedModels?(): Promise<LoadedModel[]>;
   /** onProgress is best-effort UI plumbing: it may never fire (a download can
    * complete before any progress event), and implementations need not guard

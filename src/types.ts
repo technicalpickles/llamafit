@@ -5,6 +5,19 @@ export interface ModelInfo {
   parameterSizeB: number | null;
   quantizationLevel: string | null;
   diskSizeBytes: number | null;
+  // Remote-discovery metadata. Optional: local rows and backends without
+  // signal support leave them unset, which also keeps their JSON output
+  // byte-identical (JSON.stringify omits absent keys).
+  author?: string | null;
+  availableQuants?: string[];
+  signals?: RemoteSignals | null;
+}
+
+export interface RemoteSignals {
+  downloads: number | null;
+  likes: number | null;
+  trendingScore: number | null;
+  lastModified: string | null;
 }
 
 export interface SkippedModel {
