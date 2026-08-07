@@ -269,5 +269,6 @@
   },
   "baselineHeadroomGb": 16,
   "currentHeadroomGb": 20.8,
-  "scrapeWarning": null
+  "scrapeWarning": null,
+  "remoteGuidance": null
 }

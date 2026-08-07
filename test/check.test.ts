@@ -3,10 +3,11 @@ import { runCheck, type CheckDeps } from '../src/check.js';
 import type { OllamaTagsResponse } from '../src/backends/ollama/client.js';
 import type { ModelInfo } from '../src/types.js';
 import type { SystemMemoryState } from '../src/probes/types.js';
-import { formulaEstimator } from '../src/estimators/formula.js';
+import { formulaEstimator, maxCandidateParamsB } from '../src/estimators/formula.js';
 import { GapCollector } from '../src/gaps.js';
 import { mapTagsToLocalModels } from '../src/backends/ollama/index.js';
 import { fixtureBackend, fixtureProbe, loadJsonFixture } from './helpers/fixture-backend.js';
+import { REMOTE_GUIDANCE } from '../src/hf/guidance.js';
 
 const fakeSystem: SystemMemoryState = {
   totalGb: 24,
@@ -226,5 +227,74 @@ describe('runCheck', () => {
 
     expect(result.rows.length).toBeGreaterThan(0);
     expect(result.rows.every((r) => r.estimateSource === 'estimated')).toBe(true);
+  });
+});
+
+describe('remote candidate signals and guidance', () => {
+  it('passes a headroom-derived cap to remoteCandidates', async () => {
+    const seen: unknown[] = [];
+    const result = await runCheck(
+      'mlx',
+      makeDeps({
+        backend: fixtureBackend({
+          loadedModels: async () => [],
+          remoteCandidates: async (query, opts) => {
+            seen.push([query, opts]);
+            return [];
+          },
+        }),
+      })
+    );
+    const [, opts] = seen[0] as [string, { maxParameterSizeB?: number }];
+    expect(opts.maxParameterSizeB).toBeCloseTo(maxCandidateParamsB(result.baselineHeadroomGb), 6);
+  });
+
+  it('copies author, quants, and signals onto remote rows and sets guidance', async () => {
+    const remote: ModelInfo[] = [
+      {
+        name: 'unsloth/gpt-oss-mlx',
+        source: 'remote',
+        url: 'https://huggingface.co/unsloth/gpt-oss-mlx',
+        parameterSizeB: 9,
+        quantizationLevel: null,
+        diskSizeBytes: null,
+        author: 'unsloth',
+        availableQuants: ['Q4_K_M'],
+        signals: { downloads: 1, likes: 2, trendingScore: 3, lastModified: 'x' },
+      },
+    ];
+    const result = await runCheck(
+      'mlx',
+      makeDeps({
+        backend: fixtureBackend({ loadedModels: async () => [], remoteCandidates: async () => remote }),
+      })
+    );
+    const row = result.rows.find((r) => r.source === 'remote')!;
+    expect(row.author).toBe('unsloth');
+    expect(row.availableQuants).toEqual(['Q4_K_M']);
+    expect(row.signals?.downloads).toBe(1);
+    expect(result.remoteGuidance).toBe(REMOTE_GUIDANCE);
+  });
+
+  it('leaves guidance null for signal-less backends (ollama-shaped)', async () => {
+    const remote: ModelInfo[] = [
+      {
+        name: 'pd95/gptoss-mlx',
+        source: 'remote',
+        url: 'https://ollama.com/pd95/gptoss-mlx',
+        parameterSizeB: 20,
+        quantizationLevel: null,
+        diskSizeBytes: null,
+      },
+    ];
+    const result = await runCheck(
+      'mlx',
+      makeDeps({
+        backend: fixtureBackend({ loadedModels: async () => [], remoteCandidates: async () => remote }),
+      })
+    );
+    expect(result.remoteGuidance).toBeNull();
+    const row = result.rows.find((r) => r.source === 'remote')!;
+    expect(row.signals).toBeUndefined();
   });
 });

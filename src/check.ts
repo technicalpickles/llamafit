@@ -1,10 +1,11 @@
 import type { Backend } from './backends/types.js';
-import type { LoadedModel, ModelInfo } from './types.js';
+import type { LoadedModel, ModelInfo, RemoteSignals } from './types.js';
 import type { SystemProbe, SystemMemoryState } from './probes/types.js';
 import type { Estimator, Verdict } from './estimators/types.js';
-import { classifyVerdict } from './estimators/formula.js';
+import { classifyVerdict, maxCandidateParamsB } from './estimators/formula.js';
 import type { GapCollector } from './gaps.js';
 import { loadThresholds } from './data.js';
+import { REMOTE_GUIDANCE } from './hf/guidance.js';
 
 export interface CheckRow {
   name: string;
@@ -20,6 +21,9 @@ export interface CheckRow {
   quantKnown: boolean;
   baselineVerdict: Verdict | 'unknown';
   currentVerdict: Verdict | 'unknown';
+  author?: string | null;
+  availableQuants?: string[];
+  signals?: RemoteSignals | null;
 }
 
 export interface CheckResult {
@@ -29,6 +33,7 @@ export interface CheckResult {
   baselineHeadroomGb: number;
   currentHeadroomGb: number;
   scrapeWarning: string | null;
+  remoteGuidance: string | null;
 }
 
 export interface CheckDeps {
@@ -69,7 +74,12 @@ export async function runCheck(query: string, deps: CheckDeps): Promise<CheckRes
   let remoteCandidates: ModelInfo[] = [];
   let scrapeWarning: string | null = null;
   try {
-    remoteCandidates = (await backend.remoteCandidates?.(query)) ?? [];
+    remoteCandidates =
+      (await backend.remoteCandidates?.(query, {
+        // Baseline headroom, not current: discovery shows what the machine can
+        // run, not what this moment's memory pressure allows.
+        maxParameterSizeB: maxCandidateParamsB(baselineHeadroomGb),
+      })) ?? [];
   } catch (err) {
     const message = (err as Error).message;
     scrapeWarning = `Could not fetch remote model list: ${message}`;
@@ -164,6 +174,9 @@ export async function runCheck(query: string, deps: CheckDeps): Promise<CheckRes
         quantKnown: estimate.quantKnown,
         baselineVerdict: estimate.baselineVerdict,
         currentVerdict: estimate.currentVerdict,
+        ...(c.author !== undefined ? { author: c.author } : {}),
+        ...(c.availableQuants !== undefined ? { availableQuants: c.availableQuants } : {}),
+        ...(c.signals !== undefined ? { signals: c.signals } : {}),
       };
     });
 
@@ -174,5 +187,6 @@ export async function runCheck(query: string, deps: CheckDeps): Promise<CheckRes
     baselineHeadroomGb,
     currentHeadroomGb,
     scrapeWarning,
+    remoteGuidance: remoteCandidates.some((c) => c.signals != null) ? REMOTE_GUIDANCE : null,
   };
 }
