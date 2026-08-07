@@ -31,3 +31,22 @@ export function buildModelsUrl(query: string, opts: HfDiscoveryOptions = {}): st
   }
   return `${HF_BASE_URL}/api/models?${params.toString()}`;
 }
+
+/** Quant token at the end of a .gguf filename, optionally sharded
+ * (-00001-of-00002). Covers Q/IQ/TQ families, floats, MXFP4, and unsloth's
+ * UD- dynamic quants. Unparseable names are skipped, never guessed. */
+const QUANT_RE = /[-._]((?:UD-)?(?:I?Q|TQ)\d[A-Z0-9_]*|F16|F32|BF16|MXFP4)(?:-\d{5}-of-\d{5})?\.gguf$/i;
+
+export function parseQuantsFromSiblings(filenames: string[]): string[] {
+  const quants: string[] = [];
+  for (const name of filenames) {
+    // mmproj files are multimodal projectors riding along in the repo; their
+    // F16/BF16 token describes the projector, not the model.
+    if (name.startsWith('mmproj')) continue;
+    const match = QUANT_RE.exec(name);
+    if (!match) continue;
+    const quant = match[1].toUpperCase();
+    if (!quants.includes(quant)) quants.push(quant);
+  }
+  return quants;
+}

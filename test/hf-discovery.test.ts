@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildModelsUrl } from '../src/hf/discovery.js';
+import { buildModelsUrl, parseQuantsFromSiblings } from '../src/hf/discovery.js';
 
 describe('buildModelsUrl', () => {
   it('builds the full query with search, cap, and all six expands', () => {
@@ -33,5 +33,40 @@ describe('buildModelsUrl', () => {
 
   it('honors a custom limit', () => {
     expect(buildModelsUrl('', { limit: 25 })).toContain('limit=25');
+  });
+});
+
+describe('parseQuantsFromSiblings', () => {
+  it('parses standard K-quants and dedupes shards', () => {
+    expect(
+      parseQuantsFromSiblings([
+        'Qwen3.5-9B-Q4_K_M.gguf',
+        'Qwen3.5-9B-Q8_0-00001-of-00002.gguf',
+        'Qwen3.5-9B-Q8_0-00002-of-00002.gguf',
+      ])
+    ).toEqual(['Q4_K_M', 'Q8_0']);
+  });
+
+  it('parses IQ, float, and unsloth UD- variants', () => {
+    expect(
+      parseQuantsFromSiblings([
+        'model-IQ4_XS.gguf',
+        'model.BF16.gguf',
+        'model-F16.gguf',
+        'model-UD-Q4_K_XL.gguf',
+      ])
+    ).toEqual(['IQ4_XS', 'BF16', 'F16', 'UD-Q4_K_XL']);
+  });
+
+  it('normalizes case to uppercase', () => {
+    expect(parseQuantsFromSiblings(['model-q4_k_m.gguf'])).toEqual(['Q4_K_M']);
+  });
+
+  it('skips mmproj projector files (their F16 is not a model quant)', () => {
+    expect(parseQuantsFromSiblings(['mmproj-F16.gguf', 'model-Q4_K_M.gguf'])).toEqual(['Q4_K_M']);
+  });
+
+  it('skips non-gguf and unparseable filenames rather than guessing', () => {
+    expect(parseQuantsFromSiblings(['README.md', 'config.json', 'model.gguf'])).toEqual([]);
   });
 });
