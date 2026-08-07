@@ -1,5 +1,11 @@
 import type { Detection, LocalModels, ModelInfo, LoadedModel, GenerateResult } from '../types.js';
 
+/** Aggregated download progress across all files a pull is fetching in parallel. */
+export interface PullProgress {
+  doneBytes: number;
+  totalBytes: number;
+}
+
 export interface Backend {
   id: string;
   displayName: string;
@@ -10,6 +16,9 @@ export interface Backend {
   // Optional capabilities — absent method = backend can't do it; callers degrade and say so.
   remoteCandidates?(query?: string): Promise<ModelInfo[]>;
   loadedModels?(): Promise<LoadedModel[]>;
-  pull?(model: string): Promise<void>;
+  /** onProgress is best-effort UI plumbing: it may never fire (a download can
+   * complete before any progress event), and implementations need not guard
+   * against it throwing. */
+  pull?(model: string, onProgress?: (p: PullProgress) => void): Promise<void>;
   unload?(model: string): Promise<void>;
 }
