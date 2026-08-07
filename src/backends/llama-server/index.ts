@@ -6,6 +6,7 @@ import {
   completion,
   fetchModels,
   fetchProps,
+  pullModel,
   unloadModel,
 } from './client.js';
 
@@ -137,12 +138,13 @@ async function generateResult(
 /** Router mode only. loadedModels() is deliberately absent: no llama-server
  * endpoint reports real per-model VRAM, and faking it from file size would
  * poison bench.ts's calibration provenance (see docs/adapters.md).
- * remoteCandidates() and pull() are tracked fast-follows. */
+ * remoteCandidates() is a tracked fast-follow. */
 export const llamaServerBackend: Backend = {
   id: 'llama-server',
   displayName: 'llama-server',
   detect,
   localModels,
   generate: generateResult,
+  pull: pullModel,
   unload: unloadModel,
 };

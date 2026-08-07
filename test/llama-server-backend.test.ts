@@ -202,10 +202,10 @@ describe('llamaServerBackend', () => {
     expect(result?.loadDurationSeconds).toBeNull();
   });
 
-  it('does not declare loadedModels, remoteCandidates, or pull', () => {
+  it('declares pull and unload, but not loadedModels or remoteCandidates', () => {
     expect('loadedModels' in llamaServerBackend).toBe(false);
     expect('remoteCandidates' in llamaServerBackend).toBe(false);
-    expect('pull' in llamaServerBackend).toBe(false);
+    expect(typeof llamaServerBackend.pull).toBe('function');
     expect(typeof llamaServerBackend.unload).toBe('function');
   });
 });
