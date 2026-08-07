@@ -356,3 +356,48 @@ describe('check command wiring', () => {
     expect(h.stdout).toHaveLength(1);
   });
 });
+
+describe('per-backend query default', () => {
+  /** 'mlx' is ollama.com's historical default; a non-ollama backend gets bare trending. */
+  function setup() {
+    const seen: Array<[string, string | undefined]> = [];
+    const ollama = fixtureBackend({
+      id: 'ollama',
+      remoteCandidates: async (q?: string) => {
+        seen.push(['ollama', q]);
+        return [];
+      },
+    });
+    const llamaServer = fixtureBackend({
+      id: 'llama-server',
+      remoteCandidates: async (q?: string) => {
+        seen.push(['llama-server', q]);
+        return [];
+      },
+    });
+    const h = harness({
+      detectBackends: async () => [
+        { backend: ollama, detection: { detected: true, version: '0.0.0', evidence: {} } },
+        { backend: llamaServer, detection: { detected: true, version: '0.0.0', evidence: {} } },
+      ],
+    });
+    return { seen, h };
+  }
+
+  it('defaults to mlx for ollama and empty for other backends when --query is not given', async () => {
+    const { seen, h } = setup();
+
+    await runCheckCommand({ color: false }, h.deps);
+
+    expect(seen).toContainEqual(['ollama', 'mlx']);
+    expect(seen).toContainEqual(['llama-server', '']);
+  });
+
+  it('an explicit --query overrides both', async () => {
+    const { seen, h } = setup();
+
+    await runCheckCommand({ query: 'qwen', color: false }, h.deps);
+
+    expect(seen.map(([, q]) => q)).toEqual(['qwen', 'qwen']);
+  });
+});

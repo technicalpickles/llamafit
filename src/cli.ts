@@ -305,7 +305,7 @@ async function resolve(
 }
 
 export interface CheckCommandOptions {
-  query: string;
+  query?: string;
   color: boolean;
   json?: boolean;
   backend?: string;
@@ -333,9 +333,12 @@ async function checkCommand(opts: CheckCommandOptions, deps: CliDeps): Promise<v
   const results: Array<{ backend: Backend; result: CheckResult }> = [];
   for (const backend of resolved.backends) {
     try {
+      // 'mlx' is the historical ollama.com search default; HF-backed backends get
+      // bare trending. An explicit --query overrides both.
+      const query = opts.query ?? (backend.id === 'ollama' ? 'mlx' : '');
       results.push({
         backend,
-        result: await runCheck(opts.query, {
+        result: await runCheck(query, {
           backend,
           probe: resolved.probe,
           estimator: formulaEstimator,
@@ -468,14 +471,14 @@ export function createProgram(): Command {
     .command('check')
     .description('Static analysis: which models fit this machine right now (no models are loaded)')
     .option('--json', 'output as JSON')
-    .option('-q, --query <query>', 'remote search query on ollama.com', 'mlx')
+    .option('-q, --query <query>', 'remote model search query (backend default when omitted)')
     .option('--no-color', 'disable colored output')
     .option('--backend <id>', 'use a specific backend instead of detecting them')
     .option('--diagnose', 'write a diagnostics bundle even when nothing failed')
     .action(
       async (opts: {
         json?: boolean;
-        query: string;
+        query?: string;
         color: boolean;
         backend?: string;
         diagnose?: boolean;
