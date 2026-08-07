@@ -31,3 +31,11 @@ export const formulaEstimator: Estimator = {
     };
   },
 };
+
+/** Inverse of the estimate formula at the fallback quant: the largest
+ * parameter count (billions) whose estimated footprint fits headroomGb.
+ * Used by check.ts to size-cap remote discovery server-side. */
+export function maxCandidateParamsB(headroomGb: number): number {
+  const fallback = lookupQuant(loadQuantTable(), '');
+  return headroomGb / (fallback.bytesPerParam * loadCalibration().overheadMultiplier);
+}

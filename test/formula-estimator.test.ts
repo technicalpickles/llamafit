@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formulaEstimator, classifyVerdict } from '../src/estimators/formula.js';
+import { formulaEstimator, classifyVerdict, maxCandidateParamsB } from '../src/estimators/formula.js';
 
 const headroom = { baselineHeadroomGb: 16, currentHeadroomGb: 20.8 };
 
@@ -115,5 +115,23 @@ describe('classifyVerdict (thresholds from data)', () => {
 
   it('will-thrash when footprint exceeds headroom outright', () => {
     expect(classifyVerdict(17, 10)).toBe('will-thrash');
+  });
+});
+
+describe('maxCandidateParamsB', () => {
+  it('round-trips through the estimate formula at the fallback quant', () => {
+    const headroomGb = 24;
+    const capB = maxCandidateParamsB(headroomGb);
+    // A model exactly at the cap, with no quant reported (falls back to the
+    // same table entry the cap derivation used), lands exactly on headroom.
+    const estimate = formulaEstimator.estimate(
+      { parameterSizeB: capB, quantizationLevel: null },
+      { baselineHeadroomGb: headroomGb, currentHeadroomGb: headroomGb }
+    );
+    expect(estimate.footprintGb).toBeCloseTo(headroomGb, 6);
+  });
+
+  it('scales linearly with headroom', () => {
+    expect(maxCandidateParamsB(32)).toBeCloseTo(maxCandidateParamsB(16) * 2, 6);
   });
 });
