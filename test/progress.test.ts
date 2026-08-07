@@ -57,3 +57,31 @@ describe('startSpinner on a TTY', () => {
     expect(stream.writes.length).toBe(countAfterStop);
   });
 });
+
+describe('spinner.update', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('renders the new message on subsequent ticks on a TTY', () => {
+    vi.useFakeTimers();
+    const stream = fakeStream();
+    const spinner = startSpinner('Pulling model...', { isTTY: true, stream });
+
+    spinner.update('Pulling model... 1.2/2.7 GB (45%)');
+    vi.advanceTimersByTime(120);
+    expect(stream.writes.at(-1)).toContain('1.2/2.7 GB (45%)');
+
+    spinner.stop();
+  });
+
+  it('is a no-op on a non-TTY stream', () => {
+    const stream = fakeStream();
+    const spinner = startSpinner('Pulling model...', { isTTY: false, stream });
+
+    spinner.update('Pulling model... 1.2/2.7 GB (45%)');
+    expect(stream.writes).toEqual(['Pulling model...\n']);
+
+    spinner.stop();
+  });
+});
