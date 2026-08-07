@@ -16,22 +16,46 @@ immediately and the download runs in the background. The adapter bridges
 that to `pull()`'s synchronous `Promise<void>` contract by consuming the
 `/models/sse` event stream until a terminal event arrives.
 
-## API surface (verified against llama.cpp server README, build b10280)
+## API surface (verified against llama.cpp server README, build b10280;
+corrected against a real router — see `.parkinglot/llama-server-captures/`)
 
 - `POST /models`, body `{"model": "org/repo:QUANT"}` → `{"success":true}`
   (download started, non-blocking) or 400 with
-  `{"error":{"message":...}}` when validation fails.
+  `{"error":{"message":...}}` when validation fails. **Live-verified
+  gap:** for a repo/quant that doesn't exist on Hugging Face, this still
+  returns 2xx — validation is lazy/absent, not a 400. See
+  `.parkinglot/llama-server-captures/BUG-nonexistent-repo-does-not-fail-at-pull.md`.
 - `GET /models/sse` — server-sent events. Relevant events, each tagged
   with a `model` field:
-  - `download_progress`: data is a map of file URL →
-    `{done: <bytes>, total: <bytes>}`; multiple files can download in
+  - `download_progress`: data is **`{ progress: { <file URL>:
+    {done: <bytes>, total: <bytes>} } }`** — the per-file map sits one
+    level deeper than initially assumed, under a `progress` key.
+    Getting this wrong silently aggregates to `NaN`/`NaN` (185/185 real
+    progress events did so before the fix — nothing throws, since
+    `Object.assign`/arithmetic on `undefined` just produces `NaN`
+    quietly). See
+    `.parkinglot/llama-server-captures/BUG-download-progress-shape.md`
+    for the raw captured payload. Multiple files can download in
     parallel.
   - `download_finished` / `download_failed`: terminal events for the
-    download.
+    download. **Live-verified gap:** `download_failed` is not reliably
+    reachable. For a nonexistent repo, the router emits
+    `download_finished` (twice, with no `data` field) instead of
+    `download_failed`, and the model is never actually added to
+    `GET /models`. Treating `download_finished` as unconditional success
+    is wrong — the adapter must re-fetch the model list and confirm the
+    requested id is present before resolving. See
+    `.parkinglot/llama-server-captures/BUG-nonexistent-repo-does-not-fail-at-pull.md`.
+  - A `model_status` event (`{"status":"downloading"}`) precedes the
+    first `download_progress` event; not branched on, silently ignored.
   - The stream is silent when nothing is changing (verified live —
     no initial snapshot event on connect).
 - `GET /models` after completion triggers the router's model-list
-  update so the new model appears.
+  update so the new model appears — and per the point above, its
+  response body is now load-bearing: the adapter checks
+  `result.data.some((m) => m.id === model)` (exact id match, no
+  `:latest`-style normalization) before treating the pull as
+  successful.
 
 ## Contract change: progress callback on Backend.pull
 
@@ -78,18 +102,19 @@ before the subscriber is attached:
    comment/retry/event fields — this server puts the event name inside
    the JSON payload). Filter to events whose `model` matches the
    requested id. Then:
-   - `download_progress` → aggregate `{done,total}` across files,
-     invoke `onProgress`.
+   - `download_progress` → unwrap `data.progress` (guard for it being
+     absent), aggregate `{done,total}` across files, invoke
+     `onProgress`.
    - `download_failed` → throw
      `llama-server failed to download '<model>'`.
-   - `download_finished` → break out of the read loop.
+   - `download_finished` → `GET /models` (existing `fetchModels()`) and
+     check the result for the requested model id. Present → resolve.
+     Absent → throw (phantom-finish case; see error-handling table).
    - Anything else (model_status, models_reload, other models'
      events) → ignore.
 4. Stream ends without a terminal event (server shutdown, connection
    drop) → throw; never hang or silently succeed.
-5. On success: `GET /models` once (existing `fetchModels()`) to
-   trigger the router's list refresh, then resolve. Always close/cancel
-   the SSE stream on every exit path.
+5. Always close/cancel the SSE stream on every exit path.
 
 No overall timeout: multi-GB downloads are legitimately slow and the
 Ollama `pull` has no timeout either. No reconnect logic: a dropped
@@ -102,7 +127,8 @@ stream mid-download is an error, not a resume point.
 | POST /models 400 (bad model id) | throw with server message |
 | `download_failed` event | throw |
 | SSE stream drops before terminal event | throw |
-| Progress events never arrive but `download_finished` does | resolve (spinner just never updates) |
+| Progress events never arrive but `download_finished` does, and the model *is* in the post-finish `GET /models` | resolve (spinner just never updates) |
+| `download_finished` fires (even repeatedly) but the model is **absent** from the post-finish `GET /models` — e.g. nonexistent repo/quant, where the router never sends `download_failed` at all | throw `llama-server reported the download of '<model>' finished, but it never appeared in the model list — does that repo/quant exist?` |
 
 ## Testing
 
@@ -114,9 +140,14 @@ fixture-backed client tests (`test/` + `test/helpers/`).
   interleaved, other models' events filtered out.
 - pull() flow: mocked fetch returning a scripted SSE body —
   happy path (progress → finished → resolves, onProgress saw
-  aggregated bytes), download_failed → rejects, POST 400 → rejects
-  without consuming stream, stream EOF without terminal event →
-  rejects.
+  aggregated bytes, `download_progress` data mocked in the real
+  `{progress: {...}}`-wrapped shape), download_failed → rejects,
+  POST 400 → rejects without consuming stream, stream EOF without
+  terminal event → rejects, phantom-finish (download_finished but the
+  post-finish `GET /models` list omits the model) → rejects naming the
+  backend and model. Happy-path `GET /models` mocks include the pulled
+  model in `data` (previously an empty list, which is no longer valid
+  once the finished-but-absent check exists).
 - Spinner.update: TTY swap renders new message; non-TTY no-op.
 - withProgress pull wrapper: onProgress formats GB/percent into
   spinner.update.

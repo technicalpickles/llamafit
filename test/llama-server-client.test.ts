@@ -101,6 +101,16 @@ function routedFetch(routes: Record<string, () => Response>): typeof fetch {
 
 const event = (payload: object) => `data: ${JSON.stringify(payload)}\n\n`;
 
+/** Minimal LlamaServerModel entry for a GET /models mock — real live-server
+ * responses always include these fields (see llama-server-models-loaded.json). */
+const modelEntry = (id: string) => ({
+  id,
+  object: 'model',
+  owned_by: 'llama-server',
+  created: 0,
+  status: { value: 'unloaded' },
+});
+
 describe('pullModel', () => {
   const MODEL = 'Qwen/Qwen2.5-0.5B-Instruct-GGUF:Q8_0';
 
@@ -110,13 +120,17 @@ describe('pullModel', () => {
       'GET /models/sse': () =>
         new Response(
           sseBody(
-            event({ model: MODEL, event: 'download_progress', data: { 'https://a.gguf': { done: 5, total: 10 } } }),
+            event({
+              model: MODEL,
+              event: 'download_progress',
+              data: { progress: { 'https://a.gguf': { done: 5, total: 10 } } },
+            }),
             event({ model: MODEL, event: 'download_finished' })
           ),
           { status: 200 }
         ),
       'POST /models': () => new Response(JSON.stringify({ success: true }), { status: 200 }),
-      'GET /models': () => new Response(JSON.stringify({ data: [], object: 'list' }), { status: 200 }),
+      'GET /models': () => new Response(JSON.stringify({ data: [modelEntry(MODEL)], object: 'list' }), { status: 200 }),
     };
     await withFetch(
       (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -136,18 +150,27 @@ describe('pullModel', () => {
         'GET /models/sse': () =>
           new Response(
             sseBody(
-              event({ model: MODEL, event: 'download_progress', data: { 'https://a.gguf': { done: 10, total: 100 } } }),
               event({
                 model: MODEL,
                 event: 'download_progress',
-                data: { 'https://a.gguf': { done: 50, total: 100 }, 'https://b.gguf': { done: 5, total: 40 } },
+                data: { progress: { 'https://a.gguf': { done: 10, total: 100 } } },
+              }),
+              event({
+                model: MODEL,
+                event: 'download_progress',
+                data: {
+                  progress: {
+                    'https://a.gguf': { done: 50, total: 100 },
+                    'https://b.gguf': { done: 5, total: 40 },
+                  },
+                },
               }),
               event({ model: MODEL, event: 'download_finished' })
             ),
             { status: 200 }
           ),
         'POST /models': () => new Response(JSON.stringify({ success: true }), { status: 200 }),
-        'GET /models': () => new Response(JSON.stringify({ data: [], object: 'list' }), { status: 200 }),
+        'GET /models': () => new Response(JSON.stringify({ data: [modelEntry(MODEL)], object: 'list' }), { status: 200 }),
       }),
       () => pullModel(MODEL, (p) => seen.push(p))
     );
@@ -164,18 +187,40 @@ describe('pullModel', () => {
         'GET /models/sse': () =>
           new Response(
             sseBody(
-              event({ model: 'someone-else', event: 'download_progress', data: { 'https://x.gguf': { done: 1, total: 2 } } }),
+              event({
+                model: 'someone-else',
+                event: 'download_progress',
+                data: { progress: { 'https://x.gguf': { done: 1, total: 2 } } },
+              }),
               event({ model: 'someone-else', event: 'download_failed' }),
               event({ model: MODEL, event: 'download_finished' })
             ),
             { status: 200 }
           ),
         'POST /models': () => new Response(JSON.stringify({ success: true }), { status: 200 }),
-        'GET /models': () => new Response(JSON.stringify({ data: [], object: 'list' }), { status: 200 }),
+        'GET /models': () => new Response(JSON.stringify({ data: [modelEntry(MODEL)], object: 'list' }), { status: 200 }),
       }),
       () => pullModel(MODEL, (p) => seen.push(p))
     );
     expect(seen).toEqual([]); // other model's progress and failure both ignored
+  });
+
+  it('throws when download_finished fires but the model never appears in the model list', async () => {
+    // Real llama-server behavior for a nonexistent repo/quant: POST /models
+    // returns 2xx and the SSE stream reports download_finished (never
+    // download_failed), but the model is silently absent afterward. See
+    // .parkinglot/llama-server-captures/BUG-nonexistent-repo-does-not-fail-at-pull.md.
+    await expect(
+      withFetch(
+        routedFetch({
+          'GET /models/sse': () =>
+            new Response(sseBody(event({ model: MODEL, event: 'download_finished' })), { status: 200 }),
+          'POST /models': () => new Response(JSON.stringify({ success: true }), { status: 200 }),
+          'GET /models': () => new Response(JSON.stringify({ data: [], object: 'list' }), { status: 200 }),
+        }),
+        () => pullModel(MODEL)
+      )
+    ).rejects.toThrow(/never appeared|not.*in.*list/i);
   });
 
   it('throws on download_failed', async () => {
@@ -213,7 +258,13 @@ describe('pullModel', () => {
         routedFetch({
           'GET /models/sse': () =>
             new Response(
-              sseBody(event({ model: MODEL, event: 'download_progress', data: { 'https://a.gguf': { done: 1, total: 2 } } })),
+              sseBody(
+                event({
+                  model: MODEL,
+                  event: 'download_progress',
+                  data: { progress: { 'https://a.gguf': { done: 1, total: 2 } } },
+                })
+              ),
               { status: 200 }
             ),
           'POST /models': () => new Response(JSON.stringify({ success: true }), { status: 200 }),

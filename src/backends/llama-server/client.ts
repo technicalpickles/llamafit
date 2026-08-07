@@ -172,7 +172,14 @@ export async function pullModel(
     for await (const ev of sseEvents(sseRes.body)) {
       if (ev.model !== model) continue;
       if (ev.event === 'download_progress') {
-        Object.assign(files, ev.data as Record<string, DownloadFileProgress>);
+        // The real payload wraps the per-file map in a `progress` key:
+        // { progress: { <url>: {done, total} } }. Guard for it being absent
+        // rather than assuming shape — see
+        // .parkinglot/llama-server-captures/BUG-download-progress-shape.md.
+        const progress = (ev.data as { progress?: Record<string, DownloadFileProgress> } | undefined)
+          ?.progress;
+        if (!progress) continue;
+        Object.assign(files, progress);
         let doneBytes = 0;
         let totalBytes = 0;
         for (const file of Object.values(files)) {
@@ -184,8 +191,17 @@ export async function pullModel(
         throw new Error(`llama-server failed to download '${model}'`);
       } else if (ev.event === 'download_finished') {
         // Per the API docs, a GET /models after completion triggers the
-        // router's model-list update so the new model shows up.
-        await fetchModels();
+        // router's model-list update so the new model shows up. But for a
+        // nonexistent repo/quant, the router reports download_finished
+        // (never download_failed) and then silently never adds the model —
+        // see .parkinglot/llama-server-captures/BUG-nonexistent-repo-does-not-fail-at-pull.md.
+        // Verify the model actually landed before declaring success.
+        const result = await fetchModels();
+        if (!result.data.some((m) => m.id === model)) {
+          throw new Error(
+            `llama-server reported the download of '${model}' finished, but it never appeared in the model list — does that repo/quant exist?`
+          );
+        }
         return;
       }
     }
