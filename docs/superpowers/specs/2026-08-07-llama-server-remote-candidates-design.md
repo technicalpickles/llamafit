@@ -166,6 +166,11 @@ changes are:
 - Copy `author`/`availableQuants`/`signals` onto remote rows.
 - Set `remoteGuidance` to the rubric when any remote row carries signals;
   `null` otherwise (keeps ollama output byte-identical today).
+- One `cli.ts` fix discovered during planning: `-q, --query` hard-defaults
+  to `'mlx'`, an ollama.com-ism that would be a garbage HF search (MLX is
+  Apple's non-GGUF format). The default becomes per-backend in the check
+  loop — `'mlx'` for ollama (today's behavior, unchanged), `''` (bare
+  trending) for everything else; an explicit `--query` overrides both.
 
 ## The rubric (`remoteGuidance`)
 
