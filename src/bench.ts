@@ -43,7 +43,6 @@ export interface BenchDeps {
 
 export async function runBench(model: string, deps: BenchDeps): Promise<BenchResult> {
   const { backend, probe } = deps;
-  const target = normalizeModelTarget(model);
   const notes: string[] = [];
 
   const { models: local } = await backend.localModels();
@@ -80,7 +79,7 @@ export async function runBench(model: string, deps: BenchDeps): Promise<BenchRes
     response = await backend.generate(model, BENCH_PROMPT, GENERATE_TIMEOUT_MS);
     if (backend.loadedModels) {
       const loaded = await backend.loadedModels();
-      const running = loaded.find((m) => m.name === target);
+      const running = loaded.find((m) => matchesModelTarget(m.name, model));
       sizeVramGb = running ? running.sizeVramGb : null;
     }
     memoryAfter = await probe.read();

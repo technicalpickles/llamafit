@@ -157,6 +157,35 @@ describe('runBench', () => {
     expect(result.status).toBe('completed');
   });
 
+  it('finds the running model VRAM when loadedModels reports an untagged name verbatim', async () => {
+    // The running-model lookup after generate() must use the same either-form matching
+    // as the already-pulled check — a backend that reports untagged ids verbatim (no
+    // :latest appended) would otherwise silently lose its VRAM reading.
+    const result = await runBench('qwen3-30b', {
+      backend: fixtureBackend({
+        localModels: async () => ({
+          models: [
+            {
+              name: 'qwen3-30b',
+              source: 'local',
+              url: null,
+              parameterSizeB: 30.5,
+              quantizationLevel: 'Q4_K_M',
+              diskSizeBytes: 19_000_000_000,
+            },
+          ],
+          skipped: [],
+        }),
+        loadedModels: async () => [
+          { name: 'qwen3-30b', sizeVramGb: 19.0, quantizationLevel: 'Q4_K_M' },
+        ],
+      }),
+      probe: fixtureProbe(SYSTEM),
+    });
+
+    expect(result.sizeVramGb).toBeCloseTo(19.0, 2);
+  });
+
   it('pulls the model when not already present', async () => {
     let pullCalled = false;
 
