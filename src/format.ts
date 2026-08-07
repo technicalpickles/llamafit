@@ -75,8 +75,19 @@ export function formatCheckTable(result: CheckResult, opts: FormatOptions = {}):
   if (remoteLinks.length > 0) {
     lines.push('', label('Remote model links:', color));
     for (const r of remoteLinks) {
-      lines.push(`  ${r.name} → ${dim(r.url as string, color)}`);
+      const quants = r.availableQuants ?? [];
+      const shown = quants.slice(0, 4).join(', ');
+      const extra = quants.length > 4 ? `, +${quants.length - 4} more` : '';
+      const quantNote = quants.length > 0 ? ` (quants: ${shown}${extra})` : '';
+      lines.push(`  ${r.name} → ${dim(r.url as string, color)}${quantNote}`);
     }
+  }
+
+  if (result.remoteGuidance !== null) {
+    lines.push(
+      '',
+      dim('Remote candidates are unvetted — see remoteGuidance in --json for how to judge sources.', color)
+    );
   }
 
   if (result.cloudModels.length > 0) {

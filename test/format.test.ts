@@ -4,6 +4,7 @@ import type { CheckResult } from '../src/check.js';
 import { formatBenchResult } from '../src/format.js';
 import type { BenchResult } from '../src/bench.js';
 import type { PullProgress } from '../src/backends/types.js';
+import { REMOTE_GUIDANCE } from '../src/hf/guidance.js';
 
 const sampleResult: CheckResult = {
   rows: [
@@ -150,6 +151,62 @@ describe('formatCheckTable', () => {
     expect(table).not.toContain('Q4_K_M?');
     const row = table.split('\n').find((l) => l.startsWith('gemma3:12b'))!;
     expect(row).toContain('8.6');
+  });
+});
+
+describe('remote candidate rendering', () => {
+  it('appends a truncated quant list to remote link lines', () => {
+    const result: CheckResult = {
+      ...sampleResult,
+      rows: [
+        {
+          name: 'pd95/gptoss-mlx',
+          source: 'remote',
+          url: 'https://ollama.com/pd95/gptoss-mlx',
+          parameterSizeB: 20,
+          quantizationLevel: 'Q4_K_M',
+          footprintGb: 14.06,
+          estimateSource: 'estimated',
+          quantKnown: false,
+          baselineVerdict: 'will-thrash',
+          currentVerdict: 'will-thrash',
+          availableQuants: ['Q4_K_M', 'Q5_K_M', 'Q8_0', 'F16', 'BF16', 'IQ4_XS'],
+        },
+      ],
+      remoteGuidance: null,
+    };
+    const out = formatCheckTable(result);
+    expect(out).toContain('quants: Q4_K_M, Q5_K_M, Q8_0, F16, +2 more');
+  });
+
+  it('omits the quant note when a remote row has none', () => {
+    const result: CheckResult = {
+      ...sampleResult,
+      rows: [
+        {
+          name: 'mxbai-embed-large',
+          source: 'remote',
+          url: 'https://ollama.com/library/mxbai-embed-large',
+          parameterSizeB: 0.3,
+          quantizationLevel: 'Q4_K_M',
+          footprintGb: 0.2,
+          estimateSource: 'estimated',
+          quantKnown: false,
+          baselineVerdict: 'comfortable',
+          currentVerdict: 'comfortable',
+        },
+      ],
+      remoteGuidance: null,
+    };
+    const out = formatCheckTable(result);
+    expect(out).not.toContain('quants:');
+  });
+
+  it('prints a guidance footer only when remoteGuidance is set', () => {
+    const withGuidance: CheckResult = { ...sampleResult, remoteGuidance: REMOTE_GUIDANCE };
+    const withoutGuidance: CheckResult = { ...sampleResult, remoteGuidance: null };
+    expect(formatCheckTable(withGuidance)).toContain('see remoteGuidance in --json');
+    expect(formatCheckTable(withoutGuidance)).not.toContain('remoteGuidance');
   });
 });
 
