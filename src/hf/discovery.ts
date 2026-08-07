@@ -95,3 +95,21 @@ export function mapHitToCandidate(hit: HfModelHit): HfCandidate {
     },
   };
 }
+
+export async function searchGgufModels(
+  query: string,
+  opts: HfDiscoveryOptions = {}
+): Promise<HfCandidate[]> {
+  const url = buildModelsUrl(query, opts);
+  const res = await fetch(url);
+  if (res.status === 429) {
+    throw new Error(
+      'Hugging Face API rate limit hit (anonymous: 500 requests per 5 minutes) — wait and retry'
+    );
+  }
+  if (!res.ok) {
+    throw new Error(`Hugging Face API returned ${res.status} for ${url}`);
+  }
+  const hits = (await res.json()) as HfModelHit[];
+  return hits.map(mapHitToCandidate);
+}

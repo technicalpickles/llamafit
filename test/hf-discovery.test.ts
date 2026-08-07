@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { buildModelsUrl, parseQuantsFromSiblings, mapHitToCandidate, type HfModelHit } from '../src/hf/discovery.js';
+import { buildModelsUrl, parseQuantsFromSiblings, mapHitToCandidate, searchGgufModels, type HfModelHit } from '../src/hf/discovery.js';
 
 describe('buildModelsUrl', () => {
   it('builds the full query with search, cap, and all six expands', () => {
@@ -120,5 +120,33 @@ describe('mapHitToCandidate', () => {
     const withSiblings = hits.find((h) => (h.siblings ?? []).some((s) => /q\d/i.test(s.rfilename)));
     expect(withSiblings).toBeDefined();
     expect(mapHitToCandidate(withSiblings!).availableQuants.length).toBeGreaterThan(0);
+  });
+});
+
+describe('searchGgufModels', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('fetches the built URL and maps hits', async () => {
+    const hits = loadHits();
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(hits), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const candidates = await searchGgufModels('qwen', { maxParameterSizeB: 16 });
+    expect(candidates.length).toBe(hits.length);
+    const calledUrl = fetchMock.mock.calls[0][0] as string;
+    expect(calledUrl).toContain('search=qwen');
+    expect(calledUrl).toContain('num_parameters=max%3A16000000000');
+  });
+
+  it('names the rate limit on 429', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 429 })));
+    await expect(searchGgufModels('')).rejects.toThrow(/rate limit/i);
+  });
+
+  it('throws a status-aware error on other non-200s', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 500 })));
+    await expect(searchGgufModels('')).rejects.toThrow(/500/);
   });
 });
