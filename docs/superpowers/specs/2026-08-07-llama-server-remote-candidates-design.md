@@ -44,9 +44,11 @@ discovery and pull line up by construction.
 - **The HF client is a shared module** (`src/hf/discovery.ts`), not
   llama-server-internal. Ollama can also pull from HF
   (`ollama pull hf.co/<owner>/<repo>:<quant>`), so a tracked fast-follow
-  can point the ollama backend at this same module and retire the
-  ollama.com scrape. Only the hit→ModelInfo mapping (pull-name shape) is
-  per-backend.
+  can add HF discovery to the ollama backend **alongside** its ollama.com
+  scrape — the scrape stays (ollama.com's library is the marginally
+  easier, more accessible path for ollama users); HF candidates merge in
+  as additional rows with `hf.co/...` pull names. Only the hit→ModelInfo
+  mapping (pull-name shape) is per-backend.
 - **API facts verified live (2026-08-07), not from docs** — the docs
   reference has rotted to an incomplete OpenAPI spec, so live probing is
   ground truth (same lesson as the pull() work):
@@ -74,11 +76,9 @@ discovery and pull line up by construction.
   `--json` covers the agent path; flags are cheap fast-follows if wanted.
 - Docker Hub `ai/` as a secondary source.
 - `HF_TOKEN` auth / rate-limit sophistication.
-- Switching the ollama backend to HF discovery (tracked fast-follow, not
-  this scope — it touches scrape tests and cloud-model `skipped`
-  handling).
-- Retiring the `scrape-failed` gap kind (rides with the ollama
-  switchover).
+- Adding HF discovery to the ollama backend (tracked fast-follow, not
+  this scope — it touches scrape tests and candidate-merging behavior;
+  the ollama.com scrape is kept either way).
 
 ## The HF request
 
@@ -210,8 +210,9 @@ Content contract (exact wording at implementation time):
 
 ## Fast-follows (tracked, not this scope)
 
-- Point ollama's `remoteCandidates` at `src/hf/discovery.ts`
-  (`hf.co/<owner>/<repo>:<quant>` pull names), retire the ollama.com
-  scrape and eventually the `scrape-failed` gap kind.
+- Add `src/hf/discovery.ts` as a second source in ollama's
+  `remoteCandidates` (`hf.co/<owner>/<repo>:<quant>` pull names), merged
+  with the ollama.com scrape results — the scrape stays as the primary,
+  most accessible path for ollama users.
 - Optional flags: `--remote-limit`, broad/curated source toggle.
 - `HF_TOKEN` passthrough if anonymous rate limits ever bite.
