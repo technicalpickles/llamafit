@@ -17,14 +17,14 @@ that to `pull()`'s synchronous `Promise<void>` contract by consuming the
 `/models/sse` event stream until a terminal event arrives.
 
 ## API surface (verified against llama.cpp server README, build b10280;
-corrected against a real router — see `.parkinglot/llama-server-captures/`)
+corrected against a real router — captured live against llama-server
+b10280, 2026-08-06)
 
 - `POST /models`, body `{"model": "org/repo:QUANT"}` → `{"success":true}`
   (download started, non-blocking) or 400 with
   `{"error":{"message":...}}` when validation fails. **Live-verified
   gap:** for a repo/quant that doesn't exist on Hugging Face, this still
-  returns 2xx — validation is lazy/absent, not a 400. See
-  `.parkinglot/llama-server-captures/BUG-nonexistent-repo-does-not-fail-at-pull.md`.
+  returns 2xx — validation is lazy/absent, not a 400.
 - `GET /models/sse` — server-sent events. Relevant events, each tagged
   with a `model` field:
   - `download_progress`: data is **`{ progress: { <file URL>:
@@ -33,10 +33,10 @@ corrected against a real router — see `.parkinglot/llama-server-captures/`)
     Getting this wrong silently aggregates to `NaN`/`NaN` (185/185 real
     progress events did so before the fix — nothing throws, since
     `Object.assign`/arithmetic on `undefined` just produces `NaN`
-    quietly). See
-    `.parkinglot/llama-server-captures/BUG-download-progress-shape.md`
-    for the raw captured payload. Multiple files can download in
-    parallel.
+    quietly). Multiple files can download in parallel. The adapter also
+    now skips any per-file entry whose `done`/`total` aren't finite
+    numbers, so a future shape drift degrades to "that file's bytes
+    don't count" instead of corrupting the whole aggregate.
   - `download_finished` / `download_failed`: terminal events for the
     download. **Live-verified gap:** `download_failed` is not reliably
     reachable. For a nonexistent repo, the router emits
@@ -44,8 +44,7 @@ corrected against a real router — see `.parkinglot/llama-server-captures/`)
     `download_failed`, and the model is never actually added to
     `GET /models`. Treating `download_finished` as unconditional success
     is wrong — the adapter must re-fetch the model list and confirm the
-    requested id is present before resolving. See
-    `.parkinglot/llama-server-captures/BUG-nonexistent-repo-does-not-fail-at-pull.md`.
+    requested id is present before resolving.
   - A `model_status` event (`{"status":"downloading"}`) precedes the
     first `download_progress` event; not branched on, silently ignored.
   - The stream is silent when nothing is changing (verified live —

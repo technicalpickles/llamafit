@@ -174,8 +174,8 @@ export async function pullModel(
       if (ev.event === 'download_progress') {
         // The real payload wraps the per-file map in a `progress` key:
         // { progress: { <url>: {done, total} } }. Guard for it being absent
-        // rather than assuming shape — see
-        // .parkinglot/llama-server-captures/BUG-download-progress-shape.md.
+        // rather than assuming shape — captured live against llama-server
+        // b10280, 2026-08-06.
         const progress = (ev.data as { progress?: Record<string, DownloadFileProgress> } | undefined)
           ?.progress;
         if (!progress) continue;
@@ -183,6 +183,11 @@ export async function pullModel(
         let doneBytes = 0;
         let totalBytes = 0;
         for (const file of Object.values(files)) {
+          // Skip malformed entries rather than let a shape drift downstream
+          // into a silent NaN (or, worse, string-concatenated garbage)
+          // spinner — the exact failure mode of the `progress`-wrapper bug
+          // fixed one level up.
+          if (!Number.isFinite(file.done) || !Number.isFinite(file.total)) continue;
           doneBytes += file.done;
           totalBytes += file.total;
         }
@@ -194,8 +199,8 @@ export async function pullModel(
         // router's model-list update so the new model shows up. But for a
         // nonexistent repo/quant, the router reports download_finished
         // (never download_failed) and then silently never adds the model —
-        // see .parkinglot/llama-server-captures/BUG-nonexistent-repo-does-not-fail-at-pull.md.
-        // Verify the model actually landed before declaring success.
+        // captured live against llama-server b10280, 2026-08-06. Verify the
+        // model actually landed before declaring success.
         const result = await fetchModels();
         if (!result.data.some((m) => m.id === model)) {
           throw new Error(

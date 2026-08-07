@@ -180,6 +180,37 @@ describe('pullModel', () => {
     ]);
   });
 
+  it('skips malformed progress entries instead of reporting NaN', async () => {
+    const seen: PullProgress[] = [];
+    await withFetch(
+      routedFetch({
+        'GET /models/sse': () =>
+          new Response(
+            sseBody(
+              event({
+                model: MODEL,
+                event: 'download_progress',
+                data: {
+                  progress: {
+                    'https://a.gguf': { done: 10, total: 100 },
+                    'https://b.gguf': { done: 'x', total: 40 },
+                  },
+                },
+              }),
+              event({ model: MODEL, event: 'download_finished' })
+            ),
+            { status: 200 }
+          ),
+        'POST /models': () => new Response(JSON.stringify({ success: true }), { status: 200 }),
+        'GET /models': () => new Response(JSON.stringify({ data: [modelEntry(MODEL)], object: 'list' }), { status: 200 }),
+      }),
+      () => pullModel(MODEL, (p) => seen.push(p))
+    );
+    // Only the well-formed https://a.gguf entry contributes; the malformed
+    // https://b.gguf entry (non-numeric done) is skipped, not NaN-ed in.
+    expect(seen).toEqual([{ doneBytes: 10, totalBytes: 100 }]);
+  });
+
   it("ignores other models' events", async () => {
     const seen: PullProgress[] = [];
     await withFetch(

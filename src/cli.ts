@@ -50,6 +50,10 @@ function withProgress(backend: Backend, color: boolean): Backend {
   const unload = backend.unload;
   return {
     ...backend,
+    // This wrapper owns progress rendering (the spinner above) and always
+    // supplies its own onProgress to the underlying pull; a caller-supplied
+    // onProgress is not accepted or forwarded. Not currently a limitation in
+    // practice — bench.ts never passes one — but worth knowing if that changes.
     pull: pull
       ? async (model) => {
           const startedAt = Date.now();
