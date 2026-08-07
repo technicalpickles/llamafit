@@ -50,3 +50,48 @@ export function parseQuantsFromSiblings(filenames: string[]): string[] {
   }
   return quants;
 }
+
+export interface HfSignals {
+  downloads: number | null;
+  likes: number | null;
+  trendingScore: number | null;
+  lastModified: string | null;
+}
+
+export interface HfModelHit {
+  id: string;
+  gguf?: { total?: number } | null;
+  siblings?: { rfilename: string }[] | null;
+  downloads?: number;
+  likes?: number;
+  trendingScore?: number;
+  lastModified?: string;
+}
+
+export interface HfCandidate {
+  repoId: string;
+  author: string;
+  url: string;
+  parameterSizeB: number | null;
+  availableQuants: string[];
+  signals: HfSignals;
+}
+
+export function mapHitToCandidate(hit: HfModelHit): HfCandidate {
+  const total = hit.gguf?.total;
+  return {
+    repoId: hit.id,
+    author: hit.id.split('/')[0],
+    url: `${HF_BASE_URL}/${hit.id}`,
+    // For MoE repos gguf.total is total params, not active — accepted
+    // approximation, consistent with localModels() reporting meta.n_params.
+    parameterSizeB: typeof total === 'number' ? total / 1e9 : null,
+    availableQuants: parseQuantsFromSiblings((hit.siblings ?? []).map((s) => s.rfilename)),
+    signals: {
+      downloads: hit.downloads ?? null,
+      likes: hit.likes ?? null,
+      trendingScore: hit.trendingScore ?? null,
+      lastModified: hit.lastModified ?? null,
+    },
+  };
+}
