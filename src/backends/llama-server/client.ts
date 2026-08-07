@@ -1,3 +1,6 @@
+import type { PullProgress } from '../types.js';
+import { sseEvents } from './sse.js';
+
 // LLAMA_SERVER_BASE_URL accepts either `host:port` or a full URL (same contract
 // as OLLAMA_HOST), so only add a scheme when there isn't one already.
 export const LLAMA_SERVER_BASE_URL = process.env.LLAMA_SERVER_BASE_URL
@@ -140,4 +143,58 @@ export async function unloadModel(model: string): Promise<void> {
     method: 'POST',
     body: JSON.stringify({ model }),
   });
+}
+
+interface DownloadFileProgress {
+  done: number;
+  total: number;
+}
+
+/** Bridges llama-server's async download API to pull()'s synchronous contract.
+ * Subscribes to /models/sse BEFORE POSTing so a download that finishes quickly
+ * can't complete before anyone is listening, then consumes events until
+ * download_finished/download_failed. A stream that ends without a terminal
+ * event (server shutdown, dropped connection) is an error — never a hang or a
+ * silent success. No overall timeout: multi-GB downloads are legitimately slow. */
+export async function pullModel(
+  model: string,
+  onProgress?: (p: PullProgress) => void
+): Promise<void> {
+  const sseRes = await llamaServerRequest('/models/sse');
+  if (!sseRes.body) {
+    throw new Error(`llama-server returned no body for /models/sse`);
+  }
+  // Progress arrives per file URL and models can download several files in
+  // parallel; keep the latest per-file numbers and report the sums.
+  const files: Record<string, DownloadFileProgress> = {};
+  try {
+    await llamaServerRequest('/models', { method: 'POST', body: JSON.stringify({ model }) });
+    for await (const ev of sseEvents(sseRes.body)) {
+      if (ev.model !== model) continue;
+      if (ev.event === 'download_progress') {
+        Object.assign(files, ev.data as Record<string, DownloadFileProgress>);
+        let doneBytes = 0;
+        let totalBytes = 0;
+        for (const file of Object.values(files)) {
+          doneBytes += file.done;
+          totalBytes += file.total;
+        }
+        onProgress?.({ doneBytes, totalBytes });
+      } else if (ev.event === 'download_failed') {
+        throw new Error(`llama-server failed to download '${model}'`);
+      } else if (ev.event === 'download_finished') {
+        // Per the API docs, a GET /models after completion triggers the
+        // router's model-list update so the new model shows up.
+        await fetchModels();
+        return;
+      }
+    }
+    throw new Error(
+      `llama-server event stream ended before '${model}' finished downloading`
+    );
+  } finally {
+    // sseEvents cancels the stream when the for-await exits, but the POST can
+    // throw before iteration ever starts — cancel here too (idempotent).
+    await sseRes.body.cancel().catch(() => {});
+  }
 }

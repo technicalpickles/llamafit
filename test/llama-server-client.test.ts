@@ -4,8 +4,10 @@ import {
   fetchModels,
   unloadModel,
   completion,
+  pullModel,
   type LlamaServerModelsResponse,
 } from '../src/backends/llama-server/client.js';
+import type { PullProgress } from '../src/backends/types.js';
 
 function loadFixture<T>(name: string): T {
   return JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf-8'));
@@ -72,5 +74,152 @@ describe('completion', () => {
         );
       })) as typeof fetch;
     await expect(withFetch(abortingFetch, () => completion('m', 'p', 10))).resolves.toBeNull();
+  });
+});
+
+function sseBody(...chunks: string[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+      controller.close();
+    },
+  });
+}
+
+/** Routes fetch calls by "METHOD pathname" so one mock covers the SSE subscribe,
+ * the download POST, and the final list refresh. */
+function routedFetch(routes: Record<string, () => Response>): typeof fetch {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = new URL(String(input)).pathname;
+    const key = `${init?.method ?? 'GET'} ${path}`;
+    const route = routes[key];
+    if (!route) throw new Error(`unexpected fetch: ${key}`);
+    return route();
+  }) as typeof fetch;
+}
+
+const event = (payload: object) => `data: ${JSON.stringify(payload)}\n\n`;
+
+describe('pullModel', () => {
+  const MODEL = 'Qwen/Qwen2.5-0.5B-Instruct-GGUF:Q8_0';
+
+  it('resolves after download_finished and refreshes the model list', async () => {
+    const calls: string[] = [];
+    const routes = {
+      'GET /models/sse': () =>
+        new Response(
+          sseBody(
+            event({ model: MODEL, event: 'download_progress', data: { 'https://a.gguf': { done: 5, total: 10 } } }),
+            event({ model: MODEL, event: 'download_finished' })
+          ),
+          { status: 200 }
+        ),
+      'POST /models': () => new Response(JSON.stringify({ success: true }), { status: 200 }),
+      'GET /models': () => new Response(JSON.stringify({ data: [], object: 'list' }), { status: 200 }),
+    };
+    await withFetch(
+      (async (input: RequestInfo | URL, init?: RequestInit) => {
+        calls.push(`${init?.method ?? 'GET'} ${new URL(String(input)).pathname}`);
+        return (routedFetch(routes) as (i: RequestInfo | URL, n?: RequestInit) => Promise<Response>)(input, init);
+      }) as typeof fetch,
+      () => pullModel(MODEL)
+    );
+    // SSE subscription must come first (closes the tiny-model race), refresh last.
+    expect(calls).toEqual(['GET /models/sse', 'POST /models', 'GET /models']);
+  });
+
+  it('aggregates progress across parallel files and reports it', async () => {
+    const seen: PullProgress[] = [];
+    await withFetch(
+      routedFetch({
+        'GET /models/sse': () =>
+          new Response(
+            sseBody(
+              event({ model: MODEL, event: 'download_progress', data: { 'https://a.gguf': { done: 10, total: 100 } } }),
+              event({
+                model: MODEL,
+                event: 'download_progress',
+                data: { 'https://a.gguf': { done: 50, total: 100 }, 'https://b.gguf': { done: 5, total: 40 } },
+              }),
+              event({ model: MODEL, event: 'download_finished' })
+            ),
+            { status: 200 }
+          ),
+        'POST /models': () => new Response(JSON.stringify({ success: true }), { status: 200 }),
+        'GET /models': () => new Response(JSON.stringify({ data: [], object: 'list' }), { status: 200 }),
+      }),
+      () => pullModel(MODEL, (p) => seen.push(p))
+    );
+    expect(seen).toEqual([
+      { doneBytes: 10, totalBytes: 100 },
+      { doneBytes: 55, totalBytes: 140 },
+    ]);
+  });
+
+  it("ignores other models' events", async () => {
+    const seen: PullProgress[] = [];
+    await withFetch(
+      routedFetch({
+        'GET /models/sse': () =>
+          new Response(
+            sseBody(
+              event({ model: 'someone-else', event: 'download_progress', data: { 'https://x.gguf': { done: 1, total: 2 } } }),
+              event({ model: 'someone-else', event: 'download_failed' }),
+              event({ model: MODEL, event: 'download_finished' })
+            ),
+            { status: 200 }
+          ),
+        'POST /models': () => new Response(JSON.stringify({ success: true }), { status: 200 }),
+        'GET /models': () => new Response(JSON.stringify({ data: [], object: 'list' }), { status: 200 }),
+      }),
+      () => pullModel(MODEL, (p) => seen.push(p))
+    );
+    expect(seen).toEqual([]); // other model's progress and failure both ignored
+  });
+
+  it('throws on download_failed', async () => {
+    await expect(
+      withFetch(
+        routedFetch({
+          'GET /models/sse': () =>
+            new Response(sseBody(event({ model: MODEL, event: 'download_failed' })), { status: 200 }),
+          'POST /models': () => new Response(JSON.stringify({ success: true }), { status: 200 }),
+        }),
+        () => pullModel(MODEL)
+      )
+    ).rejects.toThrow(`llama-server failed to download '${MODEL}'`);
+  });
+
+  it('throws with the server message when POST /models is rejected', async () => {
+    await expect(
+      withFetch(
+        routedFetch({
+          'GET /models/sse': () => new Response(sseBody(), { status: 200 }),
+          'POST /models': () =>
+            new Response(
+              JSON.stringify({ error: { code: 400, message: 'model validation failed, unable to download', type: 'invalid_request_error' } }),
+              { status: 400 }
+            ),
+        }),
+        () => pullModel(MODEL)
+      )
+    ).rejects.toThrow(/model validation failed/);
+  });
+
+  it('throws when the stream ends before a terminal event', async () => {
+    await expect(
+      withFetch(
+        routedFetch({
+          'GET /models/sse': () =>
+            new Response(
+              sseBody(event({ model: MODEL, event: 'download_progress', data: { 'https://a.gguf': { done: 1, total: 2 } } })),
+              { status: 200 }
+            ),
+          'POST /models': () => new Response(JSON.stringify({ success: true }), { status: 200 }),
+        }),
+        () => pullModel(MODEL)
+      )
+    ).rejects.toThrow(/event stream ended/);
   });
 });
