@@ -1,3 +1,4 @@
+import { isFailedSource } from './backends/types.js';
 import type { Backend, RemoteSourceReport } from './backends/types.js';
 import type { LoadedModel, ModelInfo, RemoteSignals } from './types.js';
 import type { SystemProbe, SystemMemoryState } from './probes/types.js';
@@ -97,7 +98,7 @@ export async function runCheck(query: string | undefined, deps: CheckDeps): Prom
       evidence: { backend: backend.id, query, error: message },
     });
   }
-  const failedSources = remoteSources.filter((s) => !s.ok);
+  const failedSources = remoteSources.filter(isFailedSource);
   for (const s of failedSources) {
     // Per-source summary keeps GapCollector's kind+summary dedup from
     // collapsing two different failed sources into one gap.

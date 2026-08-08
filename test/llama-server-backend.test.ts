@@ -8,6 +8,7 @@ import {
   llamaServerBackend,
 } from '../src/backends/llama-server/index.js';
 import { hfCandidatesToModelInfo } from '../src/hf/model-info.js';
+import { isFailedSource } from '../src/backends/types.js';
 import type {
   LlamaServerModelsResponse,
   LlamaServerCompletionResponse,
@@ -256,7 +257,8 @@ describe('llamaServerBackend', () => {
     const discovery = await llamaServerBackend.remoteCandidates!('qwen');
     expect(discovery.candidates).toEqual([]);
     expect(discovery.sources).toHaveLength(1);
-    expect(discovery.sources[0].ok).toBe(false);
-    expect(discovery.sources[0].error).toEqual(expect.any(String));
+    const [source] = discovery.sources;
+    if (!isFailedSource(source)) throw new Error('expected a failed source');
+    expect(source.error).toEqual(expect.any(String));
   });
 });

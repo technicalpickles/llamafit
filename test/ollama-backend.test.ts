@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { describeBackendConformance } from './conformance/backend.js';
 import { ollamaBackend } from '../src/backends/ollama/index.js';
+import { isFailedSource } from '../src/backends/types.js';
 import type { OllamaTagsResponse, OllamaPsResponse } from '../src/backends/ollama/client.js';
 
 function loadFixture<T>(name: string): T {
@@ -157,8 +158,9 @@ describe('ollamaBackend remoteCandidates (two sources)', () => {
     const { candidates, sources } = await ollamaBackend.remoteCandidates!();
     expect(candidates.length).toBeGreaterThan(0);
     expect(candidates.every((c) => c.discoverySource === 'ollama.com')).toBe(true);
-    expect(sources.find((s) => s.id === 'huggingface')).toMatchObject({ ok: false });
-    expect(sources.find((s) => s.id === 'huggingface')!.error).toMatch(/500/);
+    const hfSource = sources.find(isFailedSource);
+    expect(hfSource).toMatchObject({ id: 'huggingface', ok: false });
+    expect(hfSource!.error).toMatch(/500/);
   });
 
   it('both sources failing returns empty candidates and two failure reports, no throw', async () => {

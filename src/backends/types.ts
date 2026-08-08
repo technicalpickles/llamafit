@@ -11,11 +11,14 @@ export interface RemoteCandidateOptions {
   maxParameterSizeB?: number;
 }
 
-export interface RemoteSourceReport {
-  id: string; // 'ollama.com' | 'huggingface'
-  query: string; // the query actually sent to this source
-  ok: boolean;
-  error?: string; // present when ok is false
+export type RemoteSourceReport =
+  | { id: string; query: string; ok: true } // 'ollama.com' | 'huggingface'
+  | { id: string; query: string; ok: false; error: string };
+
+export function isFailedSource(
+  s: RemoteSourceReport
+): s is Extract<RemoteSourceReport, { ok: false }> {
+  return !s.ok;
 }
 
 export interface RemoteDiscovery {
