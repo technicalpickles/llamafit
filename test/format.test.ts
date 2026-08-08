@@ -192,6 +192,16 @@ describe('bench hint', () => {
     const table = formatCheckTable({ ...sampleResult, rows: [unknownRow] });
     expect(table).toContain('llamafit bench qwen3-30b');
   });
+
+  it('includes --backend when the table is scoped to one backend, so a copy-pasted command can\'t autodetect its way to the wrong one', () => {
+    const table = formatCheckTable(sampleResult, { backendId: 'llama-server' });
+    expect(table).toContain('llamafit bench gemma3:12b --backend llama-server');
+  });
+
+  it('omits --backend when no backendId is given (single-backend runs, existing callers)', () => {
+    const table = formatCheckTable(sampleResult);
+    expect(table).not.toContain('--backend');
+  });
 });
 
 describe('remote sources footer', () => {

@@ -387,7 +387,7 @@ async function checkCommand(opts: CheckCommandOptions, deps: CliDeps): Promise<v
         deps.stdout(label(backend.displayName, color));
         deps.stdout('');
       }
-      deps.stdout(formatCheckTable(result, { color }));
+      deps.stdout(formatCheckTable(result, { color, backendId: backend.id }));
     }
   }
 

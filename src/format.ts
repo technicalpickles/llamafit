@@ -9,6 +9,13 @@ export interface FormatOptions {
    * ollama.com; other backends (e.g. llama-server's local GGUFs) have no such page, so
    * this is null and formatBenchResult omits the line rather than fabricate a URL. */
   modelUrl?: string | null;
+  /** The backend this CheckResult came from. formatCheckTable is called once per
+   * detected backend, so when set, the bench hint below pins `--backend <id>` — otherwise
+   * a copy-pasted command falls through to bench's own autodetection, which may not pick
+   * the same backend this table's rows came from (see the hf.co/ prefix mismatch this
+   * caused: a name pasted from the llama-server table, benched with no --backend, resolved
+   * to Ollama and failed). */
+  backendId?: string;
 }
 
 /** Printed in place of a duration/rate the backend didn't report, so degraded output
@@ -115,7 +122,11 @@ export function formatCheckTable(result: CheckResult, opts: FormatOptions = {}):
     // Prefer a row check could actually classify — recommending the one model it
     // couldn't (baselineVerdict 'unknown') would undercut the whole point of the hint.
     const suggestion = result.rows.find((r) => r.baselineVerdict !== 'unknown') ?? result.rows[0];
-    lines.push('', dim(`Next: llamafit bench ${suggestion.name} for real numbers on this machine.`, color));
+    const backendFlag = opts.backendId ? ` --backend ${opts.backendId}` : '';
+    lines.push(
+      '',
+      dim(`Next: llamafit bench ${suggestion.name}${backendFlag} for real numbers on this machine.`, color)
+    );
   }
 
   return lines.join('\n');

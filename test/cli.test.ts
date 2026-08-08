@@ -185,6 +185,22 @@ describe('check command wiring', () => {
     expect(parsed.one.rows.length).toBeGreaterThan(0);
   });
 
+  it("each backend's bench hint pins --backend <id>, so copy-pasting it can't autodetect its way to a different backend", async () => {
+    const first = fixtureBackend({ id: 'one', displayName: 'Backend One' });
+    const second = fixtureBackend({ id: 'two', displayName: 'Backend Two' });
+    const detected = async () => [
+      { backend: first, detection: { detected: true, version: '0.0.0', evidence: {} } },
+      { backend: second, detection: { detected: true, version: '0.0.0', evidence: {} } },
+    ];
+
+    const h = harness({ detectBackends: detected });
+    await runCheckCommand(CHECK_OPTS, h.deps);
+    const out = h.stdout.join('\n');
+    expect(out).toContain('llamafit bench');
+    expect(out).toContain('--backend one');
+    expect(out).toContain('--backend two');
+  });
+
   it('a failed remote scrape warns and continues: no bundle, no prompts, exit 0', async () => {
     const backend = fixtureBackend({
       remoteCandidates: async () => {
