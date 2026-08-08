@@ -5,9 +5,9 @@ import {
   normalizeFtype,
   mapModelsToLocalModels,
   mapCompletionToGenerate,
-  mapCandidatesToModelInfo,
   llamaServerBackend,
 } from '../src/backends/llama-server/index.js';
+import { hfCandidatesToModelInfo } from '../src/hf/model-info.js';
 import type {
   LlamaServerModelsResponse,
   LlamaServerCompletionResponse,
@@ -113,7 +113,7 @@ describe('mapCandidatesToModelInfo', () => {
   };
 
   it('maps a candidate to a remote ModelInfo', () => {
-    const [info] = mapCandidatesToModelInfo([candidate]);
+    const [info] = hfCandidatesToModelInfo([candidate], (c) => c.repoId);
     expect(info).toEqual({
       name: 'unsloth/Qwen3.5-9B-GGUF',
       source: 'remote',
