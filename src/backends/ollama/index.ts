@@ -1,4 +1,4 @@
-import type { Backend, RemoteCandidateOptions, RemoteDiscovery } from '../types.js';
+import type { Backend, RemoteCandidateOptions, RemoteDiscovery, RemoteSourceReport } from '../types.js';
 import type {
   Detection,
   GenerateResult,
@@ -19,6 +19,9 @@ import {
   type OllamaPsResponse,
 } from './client.js';
 import { scrapeSearch, type RemoteModelCandidate } from './scrape.js';
+import { searchGgufModels } from '../../hf/discovery.js';
+import { hfCandidatesToModelInfo } from '../../hf/model-info.js';
+import type { HfCandidate } from '../../hf/discovery.js';
 
 export function mapTagsToLocalModels(tags: OllamaTagsResponse): LocalModels {
   const models: ModelInfo[] = [];
@@ -96,23 +99,58 @@ async function localModels(): Promise<LocalModels> {
 }
 
 /** ollama.com's historical search default, applied when the user gave no query.
- * The HF source (ollama-hf-source task) defaults to '' — bare trending. */
+ * The HF source defaults to '' — bare trending, matching llama-server. */
 const SCRAPE_DEFAULT_QUERY = 'mlx';
+
+/** ollama pulls HF repos as `ollama pull hf.co/<owner>/<repo>[:<quant>]`; the
+ * quant tag is the caller's pick from availableQuants. */
+function hfPullName(c: HfCandidate): string {
+  return `hf.co/${c.repoId}`;
+}
 
 async function remoteCandidates(
   query?: string,
-  _opts: RemoteCandidateOptions = {}
+  opts: RemoteCandidateOptions = {}
 ): Promise<RemoteDiscovery> {
   const scrapeQuery = query ?? SCRAPE_DEFAULT_QUERY;
-  try {
-    const candidates = mapCandidates(await scrapeSearch(scrapeQuery));
-    return { candidates, sources: [{ id: 'ollama.com', query: scrapeQuery, ok: true }] };
-  } catch (err) {
-    return {
-      candidates: [],
-      sources: [{ id: 'ollama.com', query: scrapeQuery, ok: false, error: (err as Error).message }],
-    };
+  const hfQuery = query ?? '';
+  // allSettled: the sources fail independently — one being down must not
+  // blank the other's rows.
+  const [scrapeResult, hfResult] = await Promise.allSettled([
+    scrapeSearch(scrapeQuery),
+    // The scrape can't size-filter server-side (oversized rows still get
+    // informative "won't fit" verdicts); HF can, so only it takes the cap.
+    searchGgufModels(hfQuery, { maxParameterSizeB: opts.maxParameterSizeB }),
+  ]);
+
+  const candidates: ModelInfo[] = [];
+  const sources: RemoteSourceReport[] = [];
+
+  if (scrapeResult.status === 'fulfilled') {
+    candidates.push(...mapCandidates(scrapeResult.value));
+    sources.push({ id: 'ollama.com', query: scrapeQuery, ok: true });
+  } else {
+    sources.push({
+      id: 'ollama.com',
+      query: scrapeQuery,
+      ok: false,
+      error: (scrapeResult.reason as Error).message,
+    });
   }
+
+  if (hfResult.status === 'fulfilled') {
+    candidates.push(...hfCandidatesToModelInfo(hfResult.value, hfPullName));
+    sources.push({ id: 'huggingface', query: hfQuery, ok: true });
+  } else {
+    sources.push({
+      id: 'huggingface',
+      query: hfQuery,
+      ok: false,
+      error: (hfResult.reason as Error).message,
+    });
+  }
+
+  return { candidates, sources };
 }
 
 async function loadedModels(): Promise<LoadedModel[]> {
