@@ -333,9 +333,9 @@ async function checkCommand(opts: CheckCommandOptions, deps: CliDeps): Promise<v
   const results: Array<{ backend: Backend; result: CheckResult }> = [];
   for (const backend of resolved.backends) {
     try {
-      // 'mlx' is the historical ollama.com search default; HF-backed backends get
-      // bare trending. An explicit --query overrides both.
-      const query = opts.query ?? (backend.id === 'ollama' ? 'mlx' : '');
+      // Query defaults are per-source and live in the backends; undefined
+      // means "no query given — apply yours". sources[] reports what ran.
+      const query = opts.query;
       results.push({
         backend,
         result: await runCheck(query, {

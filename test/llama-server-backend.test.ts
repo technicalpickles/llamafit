@@ -126,6 +126,7 @@ describe('mapCandidatesToModelInfo', () => {
       author: 'unsloth',
       availableQuants: ['Q4_K_M', 'Q8_0'],
       signals: candidate.signals,
+      discoverySource: 'huggingface',
     });
   });
 });
@@ -148,6 +149,7 @@ const completionSuccess = loadFixture<LlamaServerCompletionResponse>(
   'llama-server-completion-success.json'
 );
 const unloadSuccess = loadFixture<object>('llama-server-models-unload-success.json');
+const hfHits = loadFixture<object[]>('hf-models-search.json');
 
 let originalFetch: typeof fetch;
 
@@ -163,6 +165,9 @@ beforeEach(() => {
     }
     if (url.includes('/models/unload')) {
       return new Response(JSON.stringify(unloadSuccess), { status: 200 });
+    }
+    if (url.includes('huggingface.co/api/models')) {
+      return new Response(JSON.stringify(hfHits), { status: 200 });
     }
     if (url.includes('/models')) {
       return new Response(JSON.stringify(modelsLoaded), { status: 200 });
@@ -237,5 +242,21 @@ describe('llamaServerBackend', () => {
     expect(typeof llamaServerBackend.remoteCandidates).toBe('function');
     expect(typeof llamaServerBackend.pull).toBe('function');
     expect(typeof llamaServerBackend.unload).toBe('function');
+  });
+
+  it('remoteCandidates() maps hits and reports the huggingface source as ok', async () => {
+    const discovery = await llamaServerBackend.remoteCandidates!('qwen');
+    expect(discovery.sources).toEqual([{ id: 'huggingface', query: 'qwen', ok: true }]);
+    expect(discovery.candidates.length).toBe(hfHits.length);
+    expect(discovery.candidates.every((c) => c.discoverySource === 'huggingface')).toBe(true);
+  });
+
+  it('remoteCandidates() reports a failed source instead of throwing', async () => {
+    globalThis.fetch = (async () => new Response('', { status: 500 })) as typeof fetch;
+    const discovery = await llamaServerBackend.remoteCandidates!('qwen');
+    expect(discovery.candidates).toEqual([]);
+    expect(discovery.sources).toHaveLength(1);
+    expect(discovery.sources[0].ok).toBe(false);
+    expect(discovery.sources[0].error).toEqual(expect.any(String));
   });
 });

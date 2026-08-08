@@ -38,8 +38,10 @@ export function fixtureBackend(overrides: Partial<Backend> = {}): Backend {
       loadDurationSeconds: 1,
       totalDurationSeconds: 6,
     }),
-    remoteCandidates: async () =>
-      mapCandidates(parseSearchResults(loadTextFixture('ollama-search-mlx.html'))),
+    remoteCandidates: async (query?: string) => ({
+      candidates: mapCandidates(parseSearchResults(loadTextFixture('ollama-search-mlx.html'))),
+      sources: [{ id: 'ollama.com', query: query ?? 'mlx', ok: true }],
+    }),
     loadedModels: async () => mapPsToLoaded(loadJsonFixture<OllamaPsResponse>('api-ps-loaded.json')),
     pull: async () => {},
     unload: async () => {},

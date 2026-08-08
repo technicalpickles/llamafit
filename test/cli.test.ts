@@ -358,21 +358,22 @@ describe('check command wiring', () => {
 });
 
 describe('per-backend query default', () => {
-  /** 'mlx' is ollama.com's historical default; a non-ollama backend gets bare trending. */
+  /** Query defaults moved into the backends themselves (each owns its source's
+   * default); the CLI just passes --query through, undefined when absent. */
   function setup() {
     const seen: Array<[string, string | undefined]> = [];
     const ollama = fixtureBackend({
       id: 'ollama',
       remoteCandidates: async (q?: string) => {
         seen.push(['ollama', q]);
-        return [];
+        return { candidates: [], sources: [] };
       },
     });
     const llamaServer = fixtureBackend({
       id: 'llama-server',
       remoteCandidates: async (q?: string) => {
         seen.push(['llama-server', q]);
-        return [];
+        return { candidates: [], sources: [] };
       },
     });
     const h = harness({
@@ -384,20 +385,21 @@ describe('per-backend query default', () => {
     return { seen, h };
   }
 
-  it('defaults to mlx for ollama and empty for other backends when --query is not given', async () => {
+  it('passes undefined through when --query is not given (defaults are per-source, in the backend)', async () => {
     const { seen, h } = setup();
 
     await runCheckCommand({ color: false }, h.deps);
 
-    expect(seen).toContainEqual(['ollama', 'mlx']);
-    expect(seen).toContainEqual(['llama-server', '']);
+    expect(seen).toContainEqual(['ollama', undefined]);
+    expect(seen).toContainEqual(['llama-server', undefined]);
   });
 
-  it('an explicit --query overrides both', async () => {
+  it('an explicit --query reaches every backend verbatim', async () => {
     const { seen, h } = setup();
 
     await runCheckCommand({ query: 'qwen', color: false }, h.deps);
 
-    expect(seen.map(([, q]) => q)).toEqual(['qwen', 'qwen']);
+    expect(seen).toContainEqual(['ollama', 'qwen']);
+    expect(seen).toContainEqual(['llama-server', 'qwen']);
   });
 });

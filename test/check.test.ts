@@ -28,7 +28,7 @@ function makeDeps(overrides: Partial<CheckDeps> = {}): CheckDeps {
   return {
     backend: fixtureBackend({
       loadedModels: async () => [],
-      remoteCandidates: async () => [],
+      remoteCandidates: async () => ({ candidates: [], sources: [] }),
     }),
     probe: fixtureProbe(fakeSystem),
     estimator: formulaEstimator,
@@ -103,7 +103,13 @@ describe('runCheck', () => {
     const result = await runCheck(
       'mlx',
       makeDeps({
-        backend: fixtureBackend({ loadedModels: async () => [], remoteCandidates: async () => remote }),
+        backend: fixtureBackend({
+          loadedModels: async () => [],
+          remoteCandidates: async () => ({
+            candidates: remote,
+            sources: [{ id: 'huggingface', query: '', ok: true }],
+          }),
+        }),
       })
     );
     const row = result.rows.find((r) => r.name === 'pd95/gptoss-mlx');
@@ -117,7 +123,9 @@ describe('runCheck', () => {
   it('uses the real size_vram for a model that is currently loaded, marked measured', async () => {
     const result = await runCheck(
       'mlx',
-      makeDeps({ backend: fixtureBackend({ remoteCandidates: async () => [] }) })
+      makeDeps({
+        backend: fixtureBackend({ remoteCandidates: async () => ({ candidates: [], sources: [] }) }),
+      })
     );
 
     const row = result.rows.find((r) => r.name === 'gemma3:12b');
@@ -134,7 +142,9 @@ describe('runCheck', () => {
   it('estimates models that are not currently loaded, even when something else is', async () => {
     const result = await runCheck(
       'mlx',
-      makeDeps({ backend: fixtureBackend({ remoteCandidates: async () => [] }) })
+      makeDeps({
+        backend: fixtureBackend({ remoteCandidates: async () => ({ candidates: [], sources: [] }) }),
+      })
     );
 
     const row = result.rows.find((r) => r.name === 'gemma3:27b');
@@ -160,7 +170,13 @@ describe('runCheck', () => {
       'mlx',
       makeDeps({
         gaps,
-        backend: fixtureBackend({ loadedModels: async () => [], remoteCandidates: async () => remote }),
+        backend: fixtureBackend({
+          loadedModels: async () => [],
+          remoteCandidates: async () => ({
+            candidates: remote,
+            sources: [{ id: 'huggingface', query: '', ok: true }],
+          }),
+        }),
       })
     );
     const row = result.rows.find((r) => r.name === 'pd95/gptoss-mlx');
@@ -184,7 +200,7 @@ describe('runCheck', () => {
         backend: fixtureBackend({
           localModels: async () => mapTagsToLocalModels(tags),
           loadedModels: async () => [],
-          remoteCandidates: async () => [],
+          remoteCandidates: async () => ({ candidates: [], sources: [] }),
         }),
       })
     );
@@ -221,7 +237,10 @@ describe('runCheck', () => {
     const result = await runCheck(
       'mlx',
       makeDeps({
-        backend: fixtureBackend({ loadedModels: undefined, remoteCandidates: async () => [] }),
+        backend: fixtureBackend({
+          loadedModels: undefined,
+          remoteCandidates: async () => ({ candidates: [], sources: [] }),
+        }),
       })
     );
 
@@ -240,7 +259,7 @@ describe('remote candidate signals and guidance', () => {
           loadedModels: async () => [],
           remoteCandidates: async (query, opts) => {
             seen.push([query, opts]);
-            return [];
+            return { candidates: [], sources: [] };
           },
         }),
       })
@@ -266,7 +285,13 @@ describe('remote candidate signals and guidance', () => {
     const result = await runCheck(
       'mlx',
       makeDeps({
-        backend: fixtureBackend({ loadedModels: async () => [], remoteCandidates: async () => remote }),
+        backend: fixtureBackend({
+          loadedModels: async () => [],
+          remoteCandidates: async () => ({
+            candidates: remote,
+            sources: [{ id: 'huggingface', query: '', ok: true }],
+          }),
+        }),
       })
     );
     const row = result.rows.find((r) => r.source === 'remote')!;
@@ -290,11 +315,77 @@ describe('remote candidate signals and guidance', () => {
     const result = await runCheck(
       'mlx',
       makeDeps({
-        backend: fixtureBackend({ loadedModels: async () => [], remoteCandidates: async () => remote }),
+        backend: fixtureBackend({
+          loadedModels: async () => [],
+          remoteCandidates: async () => ({
+            candidates: remote,
+            sources: [{ id: 'ollama.com', query: 'mlx', ok: true }],
+          }),
+        }),
       })
     );
     expect(result.remoteGuidance).toBeNull();
     const row = result.rows.find((r) => r.source === 'remote')!;
     expect(row.signals).toBeUndefined();
+  });
+});
+
+describe('remote discovery reporting', () => {
+  it('exposes the backend source reports as remoteSources', async () => {
+    const sources = [{ id: 'huggingface', query: 'qwen', ok: true }];
+    const result = await runCheck(
+      'qwen',
+      makeDeps({
+        backend: fixtureBackend({
+          remoteCandidates: async () => ({ candidates: [], sources }),
+        }),
+      })
+    );
+    expect(result.remoteSources).toEqual(sources);
+  });
+
+  it('a failed source becomes a gap and a warning while surviving rows still render', async () => {
+    const gaps = new GapCollector();
+    const result = await runCheck(
+      '',
+      makeDeps({
+        gaps,
+        backend: fixtureBackend({
+          loadedModels: async () => [],
+          remoteCandidates: async () => ({
+            candidates: [
+              {
+                name: 'hf.co/ggml-org/some-model-GGUF',
+                source: 'remote',
+                url: 'https://huggingface.co/ggml-org/some-model-GGUF',
+                parameterSizeB: 4,
+                quantizationLevel: null,
+                diskSizeBytes: null,
+                discoverySource: 'huggingface',
+              },
+            ],
+            sources: [
+              { id: 'ollama.com', query: 'mlx', ok: false, error: 'network unreachable' },
+              { id: 'huggingface', query: '', ok: true },
+            ],
+          }),
+        }),
+      })
+    );
+    expect(result.rows.some((r) => r.name === 'hf.co/ggml-org/some-model-GGUF')).toBe(true);
+    expect(result.scrapeWarning).toMatch(/ollama\.com.*network unreachable/);
+    const failed = gaps.list().filter((g) => g.kind === 'scrape-failed');
+    expect(failed).toHaveLength(1);
+    expect(failed[0].evidence).toMatchObject({ source: 'ollama.com', error: 'network unreachable' });
+  });
+
+  it('remote rows carry their discoverySource through to CheckRow', async () => {
+    const result = await runCheck(
+      'mlx',
+      makeDeps({ backend: fixtureBackend({ loadedModels: async () => [] }) })
+    );
+    const remote = result.rows.filter((r) => r.source === 'remote');
+    expect(remote.length).toBeGreaterThan(0);
+    expect(remote.every((r) => r.discoverySource === 'ollama.com')).toBe(true);
   });
 });

@@ -10,10 +10,13 @@ function loadFixture<T>(name: string): T {
 
 const tags = loadFixture<OllamaTagsResponse>('api-tags.json');
 const ps = loadFixture<OllamaPsResponse>('api-ps-loaded.json');
+const searchHtml = readFileSync(new URL('./fixtures/ollama-search-mlx.html', import.meta.url), 'utf-8');
 
 let originalFetch: typeof fetch;
+let requestedSearchUrl: string | null = null;
 
 beforeEach(() => {
+  requestedSearchUrl = null;
   originalFetch = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input.toString();
@@ -25,6 +28,10 @@ beforeEach(() => {
     }
     if (url.includes('/api/version')) {
       return new Response(JSON.stringify({ version: '0.5.1' }), { status: 200 });
+    }
+    if (url.includes('ollama.com/search')) {
+      requestedSearchUrl = url;
+      return new Response(searchHtml, { status: 200 });
     }
     throw new Error(`Unhandled fetch in test stub: ${url}`);
   }) as typeof fetch;
@@ -65,5 +72,22 @@ describe('ollamaBackend mapping', () => {
     expect(detection.detected).toBe(true);
     expect(detection.version).toBe('0.5.1');
     expect(detection.evidence).toHaveProperty('baseUrl');
+  });
+
+  it('remoteCandidates defaults the scrape query to mlx and reports the source', async () => {
+    const discovery = await ollamaBackend.remoteCandidates!();
+    expect(discovery.sources).toContainEqual({ id: 'ollama.com', query: 'mlx', ok: true });
+    expect(discovery.candidates.length).toBeGreaterThan(0);
+    expect(discovery.candidates.every((c) => c.discoverySource === 'ollama.com')).toBe(true);
+    expect(requestedSearchUrl).toContain('q=mlx');
+  });
+
+  it('remoteCandidates reports a failed source instead of throwing', async () => {
+    globalThis.fetch = (async () => new Response('', { status: 500 })) as typeof fetch;
+    const discovery = await ollamaBackend.remoteCandidates!('qwen');
+    expect(discovery.candidates).toEqual([]);
+    expect(discovery.sources).toEqual([
+      { id: 'ollama.com', query: 'qwen', ok: false, error: expect.any(String) },
+    ]);
   });
 });

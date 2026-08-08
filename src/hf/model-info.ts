@@ -20,5 +20,6 @@ export function hfCandidatesToModelInfo(
     author: c.author,
     availableQuants: c.availableQuants,
     signals: c.signals,
+    discoverySource: 'huggingface',
   }));
 }

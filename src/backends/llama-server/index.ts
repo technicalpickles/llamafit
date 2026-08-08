@@ -1,7 +1,7 @@
 import type { Detection, GenerateResult, LocalModels, ModelInfo } from '../../types.js';
 import { searchGgufModels } from '../../hf/discovery.js';
 import { hfCandidatesToModelInfo } from '../../hf/model-info.js';
-import type { Backend, RemoteCandidateOptions } from '../types.js';
+import type { Backend, RemoteCandidateOptions, RemoteDiscovery } from '../types.js';
 import type { LlamaServerCompletionResponse, LlamaServerModelsResponse } from './client.js';
 import {
   LLAMA_SERVER_BASE_URL,
@@ -130,11 +130,21 @@ async function localModels(): Promise<LocalModels> {
 async function remoteCandidates(
   query = '',
   opts: RemoteCandidateOptions = {}
-): Promise<ModelInfo[]> {
-  return hfCandidatesToModelInfo(
-    await searchGgufModels(query, { maxParameterSizeB: opts.maxParameterSizeB }),
-    (c) => c.repoId
-  );
+): Promise<RemoteDiscovery> {
+  try {
+    const candidates = await searchGgufModels(query, {
+      maxParameterSizeB: opts.maxParameterSizeB,
+    });
+    return {
+      candidates: hfCandidatesToModelInfo(candidates, (c) => c.repoId),
+      sources: [{ id: 'huggingface', query, ok: true }],
+    };
+  } catch (err) {
+    return {
+      candidates: [],
+      sources: [{ id: 'huggingface', query, ok: false, error: (err as Error).message }],
+    };
+  }
 }
 
 async function generateResult(

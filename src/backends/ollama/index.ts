@@ -1,4 +1,4 @@
-import type { Backend } from '../types.js';
+import type { Backend, RemoteCandidateOptions, RemoteDiscovery } from '../types.js';
 import type {
   Detection,
   GenerateResult,
@@ -61,6 +61,7 @@ export function mapCandidates(candidates: RemoteModelCandidate[]): ModelInfo[] {
     parameterSizeB: candidate.parameterSizeB,
     quantizationLevel: null,
     diskSizeBytes: null,
+    discoverySource: 'ollama.com',
   }));
 }
 
@@ -94,9 +95,24 @@ async function localModels(): Promise<LocalModels> {
   return mapTagsToLocalModels(tags);
 }
 
-async function remoteCandidates(query = ''): Promise<ModelInfo[]> {
-  const candidates = await scrapeSearch(query);
-  return mapCandidates(candidates);
+/** ollama.com's historical search default, applied when the user gave no query.
+ * The HF source (ollama-hf-source task) defaults to '' — bare trending. */
+const SCRAPE_DEFAULT_QUERY = 'mlx';
+
+async function remoteCandidates(
+  query?: string,
+  _opts: RemoteCandidateOptions = {}
+): Promise<RemoteDiscovery> {
+  const scrapeQuery = query ?? SCRAPE_DEFAULT_QUERY;
+  try {
+    const candidates = mapCandidates(await scrapeSearch(scrapeQuery));
+    return { candidates, sources: [{ id: 'ollama.com', query: scrapeQuery, ok: true }] };
+  } catch (err) {
+    return {
+      candidates: [],
+      sources: [{ id: 'ollama.com', query: scrapeQuery, ok: false, error: (err as Error).message }],
+    };
+  }
 }
 
 async function loadedModels(): Promise<LoadedModel[]> {

@@ -58,7 +58,8 @@
       "estimateSource": "estimated",
       "quantKnown": false,
       "baselineVerdict": "comfortable",
-      "currentVerdict": "comfortable"
+      "currentVerdict": "comfortable",
+      "discoverySource": "ollama.com"
     },
     {
       "name": "mistrallite",
@@ -70,7 +71,8 @@
       "estimateSource": "estimated",
       "quantKnown": false,
       "baselineVerdict": "comfortable",
-      "currentVerdict": "comfortable"
+      "currentVerdict": "comfortable",
+      "discoverySource": "ollama.com"
     },
     {
       "name": "oamazonasgabriel/qwen2.5-coder.1.5b-mlx",
@@ -82,7 +84,8 @@
       "estimateSource": "estimated",
       "quantKnown": false,
       "baselineVerdict": "comfortable",
-      "currentVerdict": "comfortable"
+      "currentVerdict": "comfortable",
+      "discoverySource": "ollama.com"
     },
     {
       "name": "rafw007/Qwen3.6-35B-A3B-mlx-claude-coder-abliterated",
@@ -94,7 +97,8 @@
       "estimateSource": "estimated",
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
-      "currentVerdict": "will-thrash"
+      "currentVerdict": "will-thrash",
+      "discoverySource": "ollama.com"
     },
     {
       "name": "charaf/Huihui-Qwen3.6-35B-A3B-abliterated-mlx",
@@ -106,7 +110,8 @@
       "estimateSource": "estimated",
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
-      "currentVerdict": "will-thrash"
+      "currentVerdict": "will-thrash",
+      "discoverySource": "ollama.com"
     },
     {
       "name": "charaf/Huihui-Qwen3.6-27B-abliterated-mlx-nvfp4",
@@ -118,7 +123,8 @@
       "estimateSource": "estimated",
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
-      "currentVerdict": "tight"
+      "currentVerdict": "tight",
+      "discoverySource": "ollama.com"
     },
     {
       "name": "aratan/qwen3.6-claude-coder-35b-A3b-mlx-Q4KM-abliterated",
@@ -130,7 +136,8 @@
       "estimateSource": "estimated",
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
-      "currentVerdict": "will-thrash"
+      "currentVerdict": "will-thrash",
+      "discoverySource": "ollama.com"
     },
     {
       "name": "cyborgxx101/gemma-4-12b-opus-finetuned-mlx",
@@ -142,7 +149,8 @@
       "estimateSource": "estimated",
       "quantKnown": false,
       "baselineVerdict": "comfortable",
-      "currentVerdict": "comfortable"
+      "currentVerdict": "comfortable",
+      "discoverySource": "ollama.com"
     },
     {
       "name": "charaf/qwen3.6-35b-a3b-coding-nvfp4-mlx",
@@ -154,7 +162,8 @@
       "estimateSource": "estimated",
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
-      "currentVerdict": "will-thrash"
+      "currentVerdict": "will-thrash",
+      "discoverySource": "ollama.com"
     },
     {
       "name": "charaf/Qwen3.6-27B-OBLITERATED-mlx-mxfp4",
@@ -166,7 +175,8 @@
       "estimateSource": "estimated",
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
-      "currentVerdict": "tight"
+      "currentVerdict": "tight",
+      "discoverySource": "ollama.com"
     },
     {
       "name": "charaf/Qwen3.6-27B-OBLITERATED-mlx-q8",
@@ -178,7 +188,8 @@
       "estimateSource": "estimated",
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
-      "currentVerdict": "tight"
+      "currentVerdict": "tight",
+      "discoverySource": "ollama.com"
     },
     {
       "name": "pd95/gptoss-mlx",
@@ -190,7 +201,8 @@
       "estimateSource": "estimated",
       "quantKnown": false,
       "baselineVerdict": "tight",
-      "currentVerdict": "comfortable"
+      "currentVerdict": "comfortable",
+      "discoverySource": "ollama.com"
     },
     {
       "name": "charaf/qwen3.6-35b-a3b-coding-nvfp4-mlx-latest-latest-latest-latest-latest-latest",
@@ -202,7 +214,8 @@
       "estimateSource": "estimated",
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
-      "currentVerdict": "will-thrash"
+      "currentVerdict": "will-thrash",
+      "discoverySource": "ollama.com"
     },
     {
       "name": "charaf/qwen3-embedding-8b-mlx-mxfp8",
@@ -214,7 +227,8 @@
       "estimateSource": "estimated",
       "quantKnown": false,
       "baselineVerdict": "comfortable",
-      "currentVerdict": "comfortable"
+      "currentVerdict": "comfortable",
+      "discoverySource": "ollama.com"
     },
     {
       "name": "CogiArt/qwen3-mlx",
@@ -226,7 +240,8 @@
       "estimateSource": "estimated",
       "quantKnown": false,
       "baselineVerdict": "comfortable",
-      "currentVerdict": "comfortable"
+      "currentVerdict": "comfortable",
+      "discoverySource": "ollama.com"
     },
     {
       "name": "pd95/apertus-mlx",
@@ -238,7 +253,8 @@
       "estimateSource": "estimated",
       "quantKnown": false,
       "baselineVerdict": "comfortable",
-      "currentVerdict": "comfortable"
+      "currentVerdict": "comfortable",
+      "discoverySource": "ollama.com"
     }
   ],
   "cloudModels": [
@@ -270,5 +286,12 @@
   "baselineHeadroomGb": 16,
   "currentHeadroomGb": 20.8,
   "scrapeWarning": null,
+  "remoteSources": [
+    {
+      "id": "ollama.com",
+      "query": "mlx",
+      "ok": true
+    }
+  ],
   "remoteGuidance": null
 }

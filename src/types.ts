@@ -11,6 +11,8 @@ export interface ModelInfo {
   author?: string | null;
   availableQuants?: string[];
   signals?: RemoteSignals | null;
+  /** Which discovery source produced this row ('ollama.com', 'huggingface'). */
+  discoverySource?: string;
 }
 
 export interface RemoteSignals {

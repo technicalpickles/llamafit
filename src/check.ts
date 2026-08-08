@@ -1,4 +1,4 @@
-import type { Backend } from './backends/types.js';
+import type { Backend, RemoteSourceReport } from './backends/types.js';
 import type { LoadedModel, ModelInfo, RemoteSignals } from './types.js';
 import type { SystemProbe, SystemMemoryState } from './probes/types.js';
 import type { Estimator, Verdict } from './estimators/types.js';
@@ -24,6 +24,7 @@ export interface CheckRow {
   author?: string | null;
   availableQuants?: string[];
   signals?: RemoteSignals | null;
+  discoverySource?: string;
 }
 
 export interface CheckResult {
@@ -33,6 +34,7 @@ export interface CheckResult {
   baselineHeadroomGb: number;
   currentHeadroomGb: number;
   scrapeWarning: string | null;
+  remoteSources: RemoteSourceReport[];
   remoteGuidance: string | null;
 }
 
@@ -47,7 +49,7 @@ export interface CheckDeps {
 /** Platforms we have no measured reserve for still need a number; 8 GB is the macOS figure. */
 const FALLBACK_BASELINE_RESERVE_GB = 8;
 
-export async function runCheck(query: string, deps: CheckDeps): Promise<CheckResult> {
+export async function runCheck(query: string | undefined, deps: CheckDeps): Promise<CheckResult> {
   const { backend, probe, estimator, gaps } = deps;
 
   const [{ models: localModels, skipped }, loaded] = await Promise.all([
@@ -72,15 +74,21 @@ export async function runCheck(query: string, deps: CheckDeps): Promise<CheckRes
   const headroom = { baselineHeadroomGb, currentHeadroomGb };
 
   let remoteCandidates: ModelInfo[] = [];
+  let remoteSources: RemoteSourceReport[] = [];
   let scrapeWarning: string | null = null;
   try {
-    remoteCandidates =
-      (await backend.remoteCandidates?.(query, {
-        // Baseline headroom, not current: discovery shows what the machine can
-        // run, not what this moment's memory pressure allows.
-        maxParameterSizeB: maxCandidateParamsB(baselineHeadroomGb),
-      })) ?? [];
+    const discovery = await backend.remoteCandidates?.(query, {
+      // Baseline headroom, not current: discovery shows what the machine can
+      // run, not what this moment's memory pressure allows.
+      maxParameterSizeB: maxCandidateParamsB(baselineHeadroomGb),
+    });
+    if (discovery) {
+      remoteCandidates = discovery.candidates;
+      remoteSources = discovery.sources;
+    }
   } catch (err) {
+    // Backstop only: backends report source failures via sources[].ok, so a
+    // throw landing here is a backend bug — treated as every source failing.
     const message = (err as Error).message;
     scrapeWarning = `Could not fetch remote model list: ${message}`;
     gaps.add({
@@ -88,6 +96,21 @@ export async function runCheck(query: string, deps: CheckDeps): Promise<CheckRes
       summary: 'remote model search failed',
       evidence: { backend: backend.id, query, error: message },
     });
+  }
+  const failedSources = remoteSources.filter((s) => !s.ok);
+  for (const s of failedSources) {
+    // Per-source summary keeps GapCollector's kind+summary dedup from
+    // collapsing two different failed sources into one gap.
+    gaps.add({
+      kind: 'scrape-failed',
+      summary: `remote source ${s.id} failed`,
+      evidence: { backend: backend.id, source: s.id, query: s.query, error: s.error },
+    });
+  }
+  if (failedSources.length > 0) {
+    scrapeWarning = failedSources
+      .map((s) => `Could not fetch remote candidates from ${s.id}: ${s.error}`)
+      .join('; ');
   }
 
   const localRows: CheckRow[] = localModels.map((model) => {
@@ -177,6 +200,7 @@ export async function runCheck(query: string, deps: CheckDeps): Promise<CheckRes
         ...(c.author !== undefined ? { author: c.author } : {}),
         ...(c.availableQuants !== undefined ? { availableQuants: c.availableQuants } : {}),
         ...(c.signals !== undefined ? { signals: c.signals } : {}),
+        ...(c.discoverySource !== undefined ? { discoverySource: c.discoverySource } : {}),
       };
     });
 
@@ -187,6 +211,7 @@ export async function runCheck(query: string, deps: CheckDeps): Promise<CheckRes
     baselineHeadroomGb,
     currentHeadroomGb,
     scrapeWarning,
+    remoteSources,
     remoteGuidance: remoteRows.some((r) => r.signals != null) ? REMOTE_GUIDANCE : null,
   };
 }
