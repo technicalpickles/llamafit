@@ -111,6 +111,10 @@ export function formatCheckTable(result: CheckResult, opts: FormatOptions = {}):
     `${label(`Current headroom (total − wired ${result.system.wiredGb.toFixed(1)}GB, approximate):`, color)} ${result.currentHeadroomGb.toFixed(2)}GB`
   );
 
+  if (result.rows.length > 0) {
+    lines.push('', dim(`Next: llamafit bench ${result.rows[0].name} for real numbers on this machine.`, color));
+  }
+
   return lines.join('\n');
 }
 

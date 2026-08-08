@@ -47,3 +47,5 @@ Cloud models (run on Ollama Cloud, no local footprint): glm-5.2:cloud, mistral-l
 
 Baseline headroom (total − 8GB macOS reserve): 16.0GB
 Current headroom (total − wired 3.2GB, approximate): 20.80GB
+
+Next: llamafit bench cyborgxx101/gemma-4-12b-opus-finetuned-mlx:4bit for real numbers on this machine.

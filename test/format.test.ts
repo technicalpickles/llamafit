@@ -156,6 +156,18 @@ describe('formatCheckTable', () => {
   });
 });
 
+describe('bench hint', () => {
+  it('points a newcomer at `llamafit bench <model>` using a real model name from the table', () => {
+    const table = formatCheckTable(sampleResult);
+    expect(table).toContain('llamafit bench gemma3:12b');
+  });
+
+  it('omits the hint when there are no models to benchmark', () => {
+    const table = formatCheckTable({ ...sampleResult, rows: [] });
+    expect(table).not.toContain('llamafit bench');
+  });
+});
+
 describe('remote sources footer', () => {
   it('names each source with the query it ran', () => {
     const result: CheckResult = {
