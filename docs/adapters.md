@@ -347,9 +347,9 @@ fixture, with no network or process involved.
 `loadJsonFixture`/`loadTextFixture` helpers in
 `test/helpers/fixture-backend.ts`. `hf-models-search.json` is a captured
 Hugging Face Hub search response, shared across every HF-consuming backend:
-`test/hf-model-info.test.ts`, `test/llama-server-backend.test.ts`, and
-`test/ollama-backend.test.ts` all load it directly rather than each keeping
-their own copy.
+`test/hf-model-info.test.ts`, `test/hf-discovery.test.ts`,
+`test/llama-server-backend.test.ts`, and `test/ollama-backend.test.ts` all
+load it directly rather than each keeping their own copy.
 
 That same file also exports `fixtureBackend(overrides)`: a `Backend` built
 from real fixtures run through the *actual* mapping functions (so a mapping
