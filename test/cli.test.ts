@@ -6,6 +6,7 @@ import {
   createProgram,
   createCliDeps,
   runCheckCommand,
+  runBenchCommand,
   type CliDeps,
 } from '../src/cli.js';
 import { writeDiagnosticsBundle } from '../src/diagnostics.js';
@@ -417,5 +418,144 @@ describe('per-backend query default', () => {
 
     expect(seen).toContainEqual(['ollama', 'qwen']);
     expect(seen).toContainEqual(['llama-server', 'qwen']);
+  });
+});
+
+describe('bench command wiring', () => {
+  const BENCH_OPTS = { color: false };
+
+  it('exits 1 with agent prompt + issue link when no backend is detected', async () => {
+    const h = harness({ detectBackends: async () => [] });
+
+    await runBenchCommand('gemma3:12b', BENCH_OPTS, h.deps);
+
+    const err = h.stderr.join('\n');
+    expect(h.exit.code).toBe(1);
+    expect(err).toContain("doesn't support yet");
+    expect(err).toContain('paste this prompt');
+    expect(h.stdout).toEqual([]);
+  });
+
+  it('--backend with unknown id lists known backends and exits 1 without a bundle', async () => {
+    const h = harness({
+      allBackends: () => [fixtureBackend({ id: 'ollama' }), fixtureBackend({ id: 'llama-server' })],
+      findBackend: () => null,
+    });
+
+    await runBenchCommand('gemma3:12b', { ...BENCH_OPTS, backend: 'nope' }, h.deps);
+
+    expect(h.exit.code).toBe(1);
+    expect(h.stderr.join('\n')).toContain('unknown backend "nope". Known: ollama, llama-server');
+    expect(h.bundles()).toEqual([]);
+  });
+
+  it('--backend pins a known backend without requiring detection, and prints the bench result', async () => {
+    const backend = fixtureBackend({ id: 'pinned', displayName: 'Pinned' });
+    const h = harness({
+      findBackend: (id) => (id === 'pinned' ? backend : null),
+      detectBackends: async () => {
+        throw new Error('detection must not run when --backend is given');
+      },
+    });
+
+    await runBenchCommand('gemma3:12b', { ...BENCH_OPTS, backend: 'pinned' }, h.deps);
+
+    expect(h.exit.code).toBe(0);
+    const out = h.stdout.join('\n');
+    expect(out).toContain('Status:');
+    expect(out).toContain('completed');
+  });
+
+  it('no --backend + multiple detected: benchmarks the first one and names it in an info note, not silently picking one', async () => {
+    const calls: string[] = [];
+    const first = fixtureBackend({
+      id: 'one',
+      displayName: 'Backend One',
+      pull: async () => {
+        calls.push('one');
+      },
+    });
+    const second = fixtureBackend({
+      id: 'two',
+      displayName: 'Backend Two',
+      pull: async () => {
+        calls.push('two');
+      },
+    });
+    const h = harness({
+      detectBackends: async () => [
+        { backend: first, detection: { detected: true, version: '0.0.0', evidence: {} } },
+        { backend: second, detection: { detected: true, version: '0.0.0', evidence: {} } },
+      ],
+    });
+
+    // A model absent from both fixtures' localModels forces a pull, so which backend's
+    // pull() fires is directly observable — the exact ambiguity that bit us live: check's
+    // hint named one backend's model, but bench's autodetection silently picked another.
+    await runBenchCommand('not-locally-present:latest', BENCH_OPTS, h.deps);
+
+    expect(h.stderr.join('\n')).toContain('Multiple backends detected; benchmarking Backend One');
+    expect(calls).toEqual(['one']);
+  });
+
+  it('skips pull() when the model is already local', async () => {
+    let pullCalled = false;
+    const backend = fixtureBackend({
+      id: 'pinned',
+      pull: async () => {
+        pullCalled = true;
+      },
+    });
+    const h = harness({ findBackend: () => backend });
+
+    // gemma3:12b is present in the fixture's localModels (test/fixtures/api-tags.json).
+    await runBenchCommand('gemma3:12b', { ...BENCH_OPTS, backend: 'pinned' }, h.deps);
+
+    expect(pullCalled).toBe(false);
+    expect(h.exit.code).toBe(0);
+  });
+
+  it('pulls the model when it is not already local', async () => {
+    let pullCalled = false;
+    const backend = fixtureBackend({
+      id: 'pinned',
+      pull: async () => {
+        pullCalled = true;
+      },
+    });
+    const h = harness({ findBackend: () => backend });
+
+    await runBenchCommand('not-locally-present:latest', { ...BENCH_OPTS, backend: 'pinned' }, h.deps);
+
+    expect(pullCalled).toBe(true);
+    expect(h.exit.code).toBe(0);
+  });
+
+  it('omits the model-page link for a non-ollama backend, and includes one for ollama', async () => {
+    const nonOllama = fixtureBackend({ id: 'llama-server' });
+    const h1 = harness({ findBackend: () => nonOllama });
+    await runBenchCommand('gemma3:12b', { ...BENCH_OPTS, backend: 'llama-server' }, h1.deps);
+    expect(h1.stdout.join('\n')).not.toContain('http');
+
+    const ollama = fixtureBackend({ id: 'ollama' });
+    const h2 = harness({ findBackend: () => ollama });
+    await runBenchCommand('gemma3:12b', { ...BENCH_OPTS, backend: 'ollama' }, h2.deps);
+    expect(h2.stdout.join('\n')).toContain('https://ollama.com/library/gemma3');
+  });
+
+  it('a failure mid-run (e.g. pull rejects) prints the error and exits 1, without a half-printed result', async () => {
+    const backend = fixtureBackend({
+      id: 'pinned',
+      pull: async () => {
+        throw new Error('pull model manifest: file does not exist');
+      },
+    });
+    const h = harness({ findBackend: () => backend });
+
+    await runBenchCommand('not-locally-present:latest', { ...BENCH_OPTS, backend: 'pinned' }, h.deps);
+
+    expect(h.exit.code).toBe(1);
+    expect(h.stderr.join('\n')).toContain('pull model manifest: file does not exist');
+    expect(h.stdout).toEqual([]);
   });
 });
