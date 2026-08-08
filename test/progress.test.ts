@@ -3,13 +3,14 @@ import { startSpinner } from '../src/progress.js';
 
 function fakeStream() {
   const writes: string[] = [];
-  return {
+  const stream = {
     write: vi.fn((chunk: string) => {
       writes.push(chunk);
       return true;
     }),
     writes,
   };
+  return stream as typeof stream & NodeJS.WritableStream;
 }
 
 describe('startSpinner on a non-TTY stream (piped/redirected)', () => {

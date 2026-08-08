@@ -3,6 +3,7 @@ import { runCheck, type CheckDeps } from '../src/check.js';
 import type { OllamaTagsResponse } from '../src/backends/ollama/client.js';
 import type { ModelInfo } from '../src/types.js';
 import type { SystemMemoryState } from '../src/probes/types.js';
+import type { RemoteSourceReport } from '../src/backends/types.js';
 import { formulaEstimator, maxCandidateParamsB } from '../src/estimators/formula.js';
 import { GapCollector } from '../src/gaps.js';
 import { mapTagsToLocalModels } from '../src/backends/ollama/index.js';
@@ -370,7 +371,7 @@ describe('remote candidate signals and guidance', () => {
 
 describe('remote discovery reporting', () => {
   it('exposes the backend source reports as remoteSources', async () => {
-    const sources = [{ id: 'huggingface', query: 'qwen', ok: true }];
+    const sources: RemoteSourceReport[] = [{ id: 'huggingface', query: 'qwen', ok: true }];
     const result = await runCheck(
       'qwen',
       makeDeps({
