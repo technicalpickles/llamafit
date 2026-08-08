@@ -7,7 +7,8 @@ push the whole system into heavy swap, because VRAM-footprint reporting like
 `llamafit` answers two questions:
 
 - **`llamafit check`** — static analysis, no models are loaded. Reads
-  locally-pulled models plus a live scrape of `ollama.com/search`, estimates
+  locally-pulled models plus remote candidates from `ollama.com/search` and
+  Hugging Face Hub (pullable as `hf.co/<owner>/<repo>:<quant>`), estimates
   memory footprint from parameter count and quantization, and classifies
   each as comfortable / tight / will-thrash against both a fixed baseline
   reserve and whatever's actually free right now.
@@ -104,9 +105,11 @@ that happens, `llamafit` writes a diagnostics bundle
 prints a ready-to-paste prompt for handing to an AI coding agent, and
 prints a pre-filled GitHub issue link for handing to a human instead.
 
-A flaky `ollama.com` scrape isn't one of those, it's just a warning on
-stderr, and the run finishes normally. That kind of transient failure only
-shows up in a bundle if you ask for one with `--diagnose`.
+A flaky remote source (the `ollama.com` scrape or a Hugging Face Hub query)
+isn't one of those, it's just a warning on stderr, and the run finishes
+normally — the other source's candidates still show up. That kind of
+transient failure only shows up in a bundle if you ask for one with
+`--diagnose`.
 
 If you're the one closing a gap, by hand or with an agent, start at
 [`docs/adapters.md`](docs/adapters.md). It's the contribution guide for

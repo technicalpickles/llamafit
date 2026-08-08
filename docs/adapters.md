@@ -217,6 +217,18 @@ export interface RemoteCandidateOptions {
   maxParameterSizeB?: number;
 }
 
+export interface RemoteSourceReport {
+  id: string; // 'ollama.com' | 'huggingface'
+  query: string; // the query actually sent to this source
+  ok: boolean;
+  error?: string; // present when ok is false
+}
+
+export interface RemoteDiscovery {
+  candidates: ModelInfo[];
+  sources: RemoteSourceReport[];
+}
+
 export interface Backend {
   id: string;
   displayName: string;
@@ -225,7 +237,7 @@ export interface Backend {
   /** Resolves null on timeout — a meaningful result, not an error. */
   generate(model: string, prompt: string, timeoutMs?: number): Promise<GenerateResult | null>;
   // Optional capabilities — absent method = backend can't do it; callers degrade and say so.
-  remoteCandidates?(query?: string, opts?: RemoteCandidateOptions): Promise<ModelInfo[]>;
+  remoteCandidates?(query?: string, opts?: RemoteCandidateOptions): Promise<RemoteDiscovery>;
   loadedModels?(): Promise<LoadedModel[]>;
   /** onProgress is best-effort UI plumbing: it may never fire (a download can
    * complete before any progress event), and implementations need not guard
@@ -236,9 +248,22 @@ export interface Backend {
 ```
 
 `Detection`, `LocalModels`, `ModelInfo`, `LoadedModel`, and `GenerateResult`
-are all defined in `src/types.ts`. `opts.maxParameterSizeB` on
-`remoteCandidates` is a server-side size filter — backends that can't apply
-it upstream (or don't support remote discovery at all) are free to ignore it.
+are all defined in `src/types.ts`. A backend can back `remoteCandidates` with
+more than one source (e.g. a scrape and an API query) — `RemoteDiscovery`
+carries both the merged `candidates` and a `sources` report per source
+queried. Source-level failures are reported as a `RemoteSourceReport` with
+`ok: false` and an `error` message; `remoteCandidates` itself must never
+throw for a single source going down, only for something backend-wide (a bug,
+not a source outage). `query === undefined` means "the caller gave no query —
+apply your own per-source default," not "pass an empty string upstream."
+`opts.maxParameterSizeB` on `remoteCandidates` is a server-side size filter —
+backends that can't apply it upstream (or don't support remote discovery at
+all) are free to ignore it. A backend with multiple sources can apply it
+selectively, per source: ollama's HF query takes the cap (the HF API accepts
+a `num_parameters` filter), its `ollama.com` scrape does not (the search page
+has no such param, so it returns oversized rows too — the check table still
+gives those an informative "won't fit" verdict rather than silently dropping
+them).
 
 ### Required vs. optional, and what absence means
 
@@ -264,9 +289,14 @@ than fail when a capability is missing:
   `"<displayName> can't pull models — pull '<model>' yourself, then
   re-run"`.
 - **No `remoteCandidates`** — `src/check.ts` calls it as
-  `(await backend.remoteCandidates?.(query)) ?? []`. No remote rows appear
-  in the check table; this is not a gap (a *failed* scrape call is — that
-  produces a `scrape-failed` gap via `GapCollector`).
+  `const discovery = await backend.remoteCandidates?.(query, opts);` and,
+  when `discovery` is present, reads `discovery.candidates` and
+  `discovery.sources` off it (an absent capability just leaves both at their
+  empty defaults). No remote rows appear in the check table; this is not a
+  gap (a *failed* source is — each `RemoteSourceReport` with `ok: false`
+  produces its own `scrape-failed` gap via `GapCollector`, one per failed
+  source, and a throw from `remoteCandidates` itself is treated the same way
+  as a backstop).
 
 ### Reference implementation: `src/backends/ollama/`
 
@@ -275,16 +305,37 @@ and never throws: a non-OK response or a network error both resolve to
 `{ detected: false, version: null, evidence: { baseUrl, error } }` rather
 than rejecting, matching the conformance suite's "never rejects" requirement.
 
+`remoteCandidates` queries two independent sources and merges them into one
+`RemoteDiscovery`:
+
+- an HTML scrape of `ollama.com/search`, defaulting to the query `'mlx'`
+  when the caller passes no query (ollama.com's own historical search
+  default);
+- a Hugging Face Hub API query via `searchGgufModels`
+  (`src/hf/discovery.ts`), defaulting to `''` — bare trending — when the
+  caller passes no query, matching llama-server's own HF-only behavior.
+
+Both run through `Promise.allSettled`, not `Promise.all`: the two sources
+fail independently, so one being down must not blank the other's rows or
+throw away its report. Each settled result becomes one `RemoteSourceReport`
+(`{ id: 'ollama.com' | 'huggingface', query, ok, error? }`) regardless of
+whether it fulfilled or rejected. HF candidates are pulled as
+`hf.co/<repoId>` (Ollama's own convention for pulling a Hugging Face repo
+directly), built by a small `hfPullName` mapper passed into the shared
+`hfCandidatesToModelInfo` (`src/hf/model-info.ts`) — see the llama-server
+section below for why that mapper is shared rather than duplicated.
+
 Mapping from Ollama's wire format to llamafit's types is factored into pure,
 independently-tested functions in `src/backends/ollama/index.ts`:
 `mapTagsToLocalModels` (from `OllamaTagsResponse`, defined in
 `src/backends/ollama/client.ts`, to `LocalModels` — also where cloud models
 get filtered into `skipped`), `mapPsToLoaded` (from `OllamaPsResponse` to
 `LoadedModel[]`), and `mapCandidates` (from the HTML-scrape result type
-`RemoteModelCandidate` in `src/backends/ollama/scrape.ts` to `ModelInfo[]`).
-Keep this separation for your own backend: a pure mapping function can be
-tested directly against a captured fixture, with no network or process
-involved.
+`RemoteModelCandidate` in `src/backends/ollama/scrape.ts` to `ModelInfo[]` —
+the `ollama.com` side only; the Hugging Face side goes through the shared
+`hfCandidatesToModelInfo` instead). Keep this separation for your own
+backend: a pure mapping function can be tested directly against a captured
+fixture, with no network or process involved.
 
 ### Fixture conventions
 
@@ -339,8 +390,13 @@ llama.cpp's `llama-server` (router mode only — classic single-instance mode
 is out of scope) is the example of a deliberately degraded backend: it
 implements `detect()`, `localModels()`, `generate()`, `unload()`, `pull()`,
 and `remoteCandidates()` (backed by Hugging Face Hub search — see
-`src/hf/discovery.ts`), but omits `loadedModels()`. Two of its behaviors are
-worth knowing if you're adapting another llama.cpp-family server:
+`src/hf/discovery.ts`), but omits `loadedModels()`. Its `remoteCandidates()`
+maps `HfCandidate[]` to `ModelInfo[]` via the same `hfCandidatesToModelInfo`
+in `src/hf/model-info.ts` that the ollama backend uses for its HF source —
+the only per-backend difference is the pull-name shape passed in
+(llama-server uses the bare `repoId`; ollama uses `hf.co/<repoId>`). Two of
+its behaviors are worth knowing if you're adapting another llama.cpp-family
+server:
 
 - `GET /models` includes GGUF metadata (`meta`: `n_params`, `size`, `ftype`)
   only for models that have been loaded at least once this server lifetime,
