@@ -19,9 +19,8 @@ import {
   type OllamaPsResponse,
 } from './client.js';
 import { scrapeSearch, type RemoteModelCandidate } from './scrape.js';
-import { searchGgufModels } from '../../hf/discovery.js';
+import { searchGgufModels, type HfCandidate } from '../../hf/discovery.js';
 import { hfCandidatesToModelInfo } from '../../hf/model-info.js';
-import type { HfCandidate } from '../../hf/discovery.js';
 
 export function mapTagsToLocalModels(tags: OllamaTagsResponse): LocalModels {
   const models: ModelInfo[] = [];

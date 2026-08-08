@@ -102,7 +102,7 @@ describe('mapModelsToLocalModels', () => {
   });
 });
 
-describe('mapCandidatesToModelInfo', () => {
+describe('hfCandidatesToModelInfo (llama-server name shape)', () => {
   const candidate: HfCandidate = {
     repoId: 'unsloth/Qwen3.5-9B-GGUF',
     author: 'unsloth',

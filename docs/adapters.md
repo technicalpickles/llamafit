@@ -295,8 +295,9 @@ than fail when a capability is missing:
   empty defaults). No remote rows appear in the check table; this is not a
   gap (a *failed* source is — each `RemoteSourceReport` with `ok: false`
   produces its own `scrape-failed` gap via `GapCollector`, one per failed
-  source, and a throw from `remoteCandidates` itself is treated the same way
-  as a backstop).
+  source, and a throw from `remoteCandidates` itself produces a single
+  backstop gap (not one per source, since the backend never reported which
+  sources it was querying)).
 
 ### Reference implementation: `src/backends/ollama/`
 
@@ -344,7 +345,11 @@ fixture, with no network or process involved.
 `api-show-gemma3-12b.json` for Ollama's REST API, and
 `ollama-search-mlx.html` for its scraped search page. Loaded via the
 `loadJsonFixture`/`loadTextFixture` helpers in
-`test/helpers/fixture-backend.ts`.
+`test/helpers/fixture-backend.ts`. `hf-models-search.json` is a captured
+Hugging Face Hub search response, shared across every HF-consuming backend:
+`test/hf-model-info.test.ts`, `test/llama-server-backend.test.ts`, and
+`test/ollama-backend.test.ts` all load it directly rather than each keeping
+their own copy.
 
 That same file also exports `fixtureBackend(overrides)`: a `Backend` built
 from real fixtures run through the *actual* mapping functions (so a mapping
