@@ -35,6 +35,7 @@ const sampleResult: CheckResult = {
   baselineHeadroomGb: 16,
   currentHeadroomGb: 0.14,
   scrapeWarning: null,
+  remoteSources: [],
   remoteGuidance: null,
 };
 
@@ -152,6 +153,35 @@ describe('formatCheckTable', () => {
     expect(table).not.toContain('Q4_K_M?');
     const row = table.split('\n').find((l) => l.startsWith('gemma3:12b'))!;
     expect(row).toContain('8.6');
+  });
+});
+
+describe('remote sources footer', () => {
+  it('names each source with the query it ran', () => {
+    const result: CheckResult = {
+      ...sampleResult,
+      remoteSources: [
+        { id: 'ollama.com', query: 'mlx', ok: true },
+        { id: 'huggingface', query: '', ok: true },
+      ],
+    };
+    const out = formatCheckTable(result);
+    expect(out).toContain('Remote sources: ollama.com search "mlx" · huggingface (default list)');
+  });
+
+  it('marks a failed source inline', () => {
+    const result: CheckResult = {
+      ...sampleResult,
+      remoteSources: [
+        { id: 'ollama.com', query: 'mlx', ok: true },
+        { id: 'huggingface', query: '', ok: false, error: 'HTTP 429' },
+      ],
+    };
+    expect(formatCheckTable(result)).toContain('huggingface failed: HTTP 429');
+  });
+
+  it('omits the line when there are no source reports', () => {
+    expect(formatCheckTable({ ...sampleResult, remoteSources: [] })).not.toContain('Remote sources:');
   });
 });
 

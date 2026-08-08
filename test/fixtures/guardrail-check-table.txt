@@ -41,6 +41,8 @@ Remote model links:
   CogiArt/qwen3-mlx → https://ollama.com/CogiArt/qwen3-mlx
   pd95/apertus-mlx → https://ollama.com/pd95/apertus-mlx
 
+Remote sources: ollama.com search "mlx"
+
 Cloud models (run on Ollama Cloud, no local footprint): glm-5.2:cloud, mistral-large-3:675b-cloud, devstral-small-2:24b-cloud, ministral-3:14b-cloud, ministral-3:8b-cloud, ministral-3:3b-cloud, gemma3:27b-cloud, gemma3:12b-cloud, gemma3:4b-cloud, minimax-m3:cloud, gemma4:cloud, gemini-3-flash-preview:cloud, qwen3.5:cloud, gpt-oss:20b-cloud
 
 Baseline headroom (total − 8GB macOS reserve): 16.0GB

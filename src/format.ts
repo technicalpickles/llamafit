@@ -83,6 +83,14 @@ export function formatCheckTable(result: CheckResult, opts: FormatOptions = {}):
     }
   }
 
+  if (result.remoteSources.length > 0) {
+    const parts = result.remoteSources.map((s) => {
+      if (!s.ok) return `${s.id} failed: ${s.error}`;
+      return s.query.length > 0 ? `${s.id} search "${s.query}"` : `${s.id} (default list)`;
+    });
+    lines.push('', dim(`Remote sources: ${parts.join(' · ')}`, color));
+  }
+
   if (result.remoteGuidance != null) {
     lines.push(
       '',
