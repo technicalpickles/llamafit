@@ -5,6 +5,7 @@ import {
   parseParameterSize,
   modelPageUrl,
   fetchTags,
+  createPullModel,
   type OllamaTagsResponse,
 } from '../src/backends/ollama/client.js';
 
@@ -82,5 +83,44 @@ describe('fetchTags error handling', () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+});
+
+describe('pullModel', () => {
+  it('resolves when the underlying pull succeeds', async () => {
+    const pullModel = createPullModel(async () => {});
+    await expect(pullModel('gemma3:12b')).resolves.toBeUndefined();
+  });
+
+  it('passes through a non-manifest failure unchanged', async () => {
+    const pullModel = createPullModel(async () => {
+      throw new Error('connect ECONNREFUSED 127.0.0.1:11434');
+    });
+    await expect(pullModel('gemma3:12b')).rejects.toThrow('connect ECONNREFUSED 127.0.0.1:11434');
+  });
+
+  it("hints at the hf.co/ prefix when a repo-shaped name fails with a manifest error (llama-server's bare-repoId format pasted for Ollama)", async () => {
+    const pullModel = createPullModel(async () => {
+      throw new Error('Command failed: ollama pull yuxinlu1/gemma-4-12B-agentic-GGUF\nError: pull model manifest: file does not exist');
+    });
+    await expect(pullModel('yuxinlu1/gemma-4-12B-agentic-GGUF')).rejects.toThrow(
+      "'hf.co/yuxinlu1/gemma-4-12B-agentic-GGUF'"
+    );
+  });
+
+  it('does not add the hf.co/ hint when the name already has that prefix', async () => {
+    const pullModel = createPullModel(async () => {
+      throw new Error('Error: pull model manifest: file does not exist');
+    });
+    await expect(pullModel('hf.co/yuxinlu1/gemma-4-12B-agentic-GGUF')).rejects.not.toThrow(
+      /looks like a Hugging Face repo id/
+    );
+  });
+
+  it('does not add the hf.co/ hint for a single-segment name (no slash to suggest a repo id)', async () => {
+    const pullModel = createPullModel(async () => {
+      throw new Error('Error: pull model manifest: file does not exist');
+    });
+    await expect(pullModel('nonexistentmodel')).rejects.not.toThrow(/looks like a Hugging Face repo id/);
   });
 });

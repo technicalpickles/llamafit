@@ -157,9 +157,39 @@ export async function unloadModel(model: string): Promise<void> {
   });
 }
 
-export async function pullModel(model: string): Promise<void> {
+type PullExec = (cmd: string, args: string[]) => Promise<unknown>;
+
+async function realPullExec(cmd: string, args: string[]): Promise<unknown> {
   const { execFile } = await import('node:child_process');
   const { promisify } = await import('node:util');
   const execFileAsync = promisify(execFile);
-  await execFileAsync('ollama', ['pull', model], { maxBuffer: 1024 * 1024 * 50 });
+  return execFileAsync(cmd, args, { maxBuffer: 1024 * 1024 * 50 });
 }
+
+/** `ollama pull` and llama-server's HF pull disagree on how to name a Hugging Face
+ * repo: Ollama wants `hf.co/<owner>/<repo>`, llama-server takes the bare
+ * `<owner>/<repo>`. A bare repoId copied from llama-server's remote candidates (or
+ * llamafit check's llama-server table) and pasted into `bench` while Ollama is the
+ * resolved backend fails with the CLI's raw "pull model manifest: file does not
+ * exist" — accurate but useless unless you already know about the prefix mismatch.
+ * Recognize that specific failure shape and point at the fix. */
+function hintPullError(model: string, err: Error): Error {
+  const looksLikeRepoId = model.includes('/') && !model.startsWith('hf.co/');
+  if (!looksLikeRepoId || !/manifest/i.test(err.message)) return err;
+  return new Error(
+    `${err.message}\n'${model}' looks like a Hugging Face repo id — Ollama pulls those as 'hf.co/${model}'. ` +
+      `If you copied this name from llama-server's remote candidates, try that prefix, or re-run with --backend llama-server.`
+  );
+}
+
+export function createPullModel(exec: PullExec = realPullExec) {
+  return async function pullModel(model: string): Promise<void> {
+    try {
+      await exec('ollama', ['pull', model]);
+    } catch (err) {
+      throw hintPullError(model, err as Error);
+    }
+  };
+}
+
+export const pullModel = createPullModel();
