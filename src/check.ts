@@ -94,7 +94,7 @@ export async function runCheck(query: string | undefined, deps: CheckDeps): Prom
     scrapeWarning = `Could not fetch remote model list: ${message}`;
     gaps.add({
       kind: 'scrape-failed',
-      summary: 'remote model search failed',
+      summary: `remote model search failed for backend ${backend.id}`,
       evidence: { backend: backend.id, query, error: message },
     });
   }
@@ -104,7 +104,7 @@ export async function runCheck(query: string | undefined, deps: CheckDeps): Prom
     // collapsing two different failed sources into one gap.
     gaps.add({
       kind: 'scrape-failed',
-      summary: `remote source ${s.id} failed`,
+      summary: `remote source ${s.id} failed for backend ${backend.id}`,
       evidence: { backend: backend.id, source: s.id, query: s.query, error: s.error },
     });
   }

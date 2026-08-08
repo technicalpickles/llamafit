@@ -233,6 +233,44 @@ describe('runCheck', () => {
     expect(scrapeFailed[0].evidence).toMatchObject({ query: 'mlx', error: 'network unreachable' });
   });
 
+  it('does not collapse the same failed source across two different backends', async () => {
+    const gaps = new GapCollector();
+    const failingDiscovery = async () => ({
+      candidates: [],
+      sources: [{ id: 'huggingface', query: 'mlx', ok: false, error: 'network unreachable' } as const],
+    });
+
+    await runCheck(
+      'mlx',
+      makeDeps({
+        gaps,
+        backend: fixtureBackend({
+          id: 'ollama',
+          loadedModels: async () => [],
+          remoteCandidates: failingDiscovery,
+        }),
+      })
+    );
+    await runCheck(
+      'mlx',
+      makeDeps({
+        gaps,
+        backend: fixtureBackend({
+          id: 'llama-server',
+          loadedModels: async () => [],
+          remoteCandidates: failingDiscovery,
+        }),
+      })
+    );
+
+    const scrapeFailed = gaps.list().filter((g) => g.kind === 'scrape-failed');
+    expect(scrapeFailed).toHaveLength(2);
+    expect(scrapeFailed.map((g) => g.summary)).toEqual([
+      'remote source huggingface failed for backend ollama',
+      'remote source huggingface failed for backend llama-server',
+    ]);
+  });
+
   it('produces no measured rows when the backend lacks loadedModels', async () => {
     const result = await runCheck(
       'mlx',
