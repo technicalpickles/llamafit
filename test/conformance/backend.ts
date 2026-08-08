@@ -42,5 +42,13 @@ export function describeBackendConformance(label: string, setup: () => Promise<B
         }
       }
     });
+
+    it('remoteCandidates(), if present, never rejects and resolves {candidates, sources}', async () => {
+      const backend = await setup();
+      if (!backend.remoteCandidates) return;
+      const discovery = await backend.remoteCandidates();
+      expect(Array.isArray(discovery.candidates)).toBe(true);
+      expect(Array.isArray(discovery.sources)).toBe(true);
+    });
   });
 }
