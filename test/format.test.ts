@@ -166,6 +166,32 @@ describe('bench hint', () => {
     const table = formatCheckTable({ ...sampleResult, rows: [] });
     expect(table).not.toContain('llamafit bench');
   });
+
+  it('skips a row check could not classify (unknown verdict) in favor of one it could', () => {
+    const unknownRow = {
+      ...sampleResult.rows[0],
+      name: 'qwen3-30b',
+      parameterSizeB: null,
+      quantizationLevel: null,
+      footprintGb: null,
+      baselineVerdict: 'unknown' as const,
+      currentVerdict: 'unknown' as const,
+    };
+    const table = formatCheckTable({ ...sampleResult, rows: [unknownRow, ...sampleResult.rows] });
+    expect(table).toContain('llamafit bench gemma3:12b');
+    expect(table).not.toContain('llamafit bench qwen3-30b');
+  });
+
+  it('falls back to the first row when every row is unclassified', () => {
+    const unknownRow = {
+      ...sampleResult.rows[0],
+      name: 'qwen3-30b',
+      baselineVerdict: 'unknown' as const,
+      currentVerdict: 'unknown' as const,
+    };
+    const table = formatCheckTable({ ...sampleResult, rows: [unknownRow] });
+    expect(table).toContain('llamafit bench qwen3-30b');
+  });
 });
 
 describe('remote sources footer', () => {
