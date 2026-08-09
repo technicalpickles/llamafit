@@ -1,3 +1,6 @@
+import { lookupQuant, type QuantTable } from '../../data.js';
+import { splitModelTag } from '../../model-names.js';
+
 // OLLAMA_HOST is documented as either `host:port` or a full URL, so only add a
 // scheme when there isn't one already (otherwise `http://http://host:port`).
 export const OLLAMA_BASE_URL = process.env.OLLAMA_HOST
@@ -77,6 +80,17 @@ const NOT_REPORTED_QUANTS: ReadonlySet<string> = new Set(['', 'unknown']);
 export function normalizeQuant(raw: string | undefined | null): string | null {
   const trimmed = (raw ?? '').trim();
   return NOT_REPORTED_QUANTS.has(trimmed.toLowerCase()) ? null : trimmed;
+}
+
+/** Ollama pulls HF repos as `hf.co/<owner>/<repo>:<quant>`, so the tag names the
+ * quantization when the manifest doesn't report one. Gated on the tag actually
+ * matching a known entry or alias, which is what makes it safe to try on every
+ * name: `gemma3:12b` and `…-mlx:4bit` simply don't match and fall through. */
+export function quantFromTag(name: string, table: QuantTable): string | null {
+  const { tag } = splitModelTag(name);
+  if (tag === null) return null;
+  const { id, known } = lookupQuant(table, tag);
+  return known ? id : null;
 }
 
 /** Official models live at ollama.com/library/<name>; community uploads are namespaced

@@ -56,7 +56,7 @@
       "quantizationLevel": "Q4_K_M",
       "footprintGb": 8.3671875,
       "estimateSource": "estimated",
-      "quantKnown": false,
+      "quantKnown": true,
       "baselineVerdict": "comfortable",
       "currentVerdict": "comfortable"
     },

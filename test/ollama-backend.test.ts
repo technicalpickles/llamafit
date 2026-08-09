@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { describeBackendConformance } from './conformance/backend.js';
-import { ollamaBackend } from '../src/backends/ollama/index.js';
+import { ollamaBackend, mapTagsToLocalModels } from '../src/backends/ollama/index.js';
 import { isFailedSource } from '../src/backends/types.js';
 import type { OllamaTagsResponse, OllamaPsResponse } from '../src/backends/ollama/client.js';
 
@@ -58,6 +58,39 @@ describe('ollamaBackend mapping', () => {
     expect(models[0]).toHaveProperty('parameterSizeB');
     // api-tags.json contains at least one remote_host model — it must land in skipped
     expect(skipped.length).toBeGreaterThan(0);
+  });
+
+  it('recovers the quantization from an hf.co tag when the manifest says nothing', () => {
+    const { models } = mapTagsToLocalModels(loadFixture<OllamaTagsResponse>('api-tags.json'));
+    const tagged = models.find((m) => m.name.endsWith('-GGUF:Q4_K_M'));
+    expect(tagged?.quantizationLevel).toBe('Q4_K_M');
+
+    const untagged = models.find((m) => m.name.endsWith('-GGUF:latest'));
+    expect(untagged?.quantizationLevel).toBeNull();
+  });
+
+  it('prefers a quantization the manifest did report over the tag', () => {
+    const { models } = mapTagsToLocalModels({
+      models: [
+        {
+          name: 'hf.co/o/r:Q2_K',
+          model: 'hf.co/o/r:Q2_K',
+          modified_at: '',
+          size: 0,
+          digest: 'aaa',
+          details: {
+            parent_model: '',
+            format: 'gguf',
+            family: 'x',
+            families: null,
+            parameter_size: '7B',
+            quantization_level: 'Q8_0',
+          },
+          capabilities: [],
+        },
+      ],
+    });
+    expect(models[0].quantizationLevel).toBe('Q8_0');
   });
 
   it('loadedModels converts size_vram to GB', async () => {

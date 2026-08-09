@@ -7,8 +7,10 @@ import {
   fetchTags,
   createPullModel,
   normalizeQuant,
+  quantFromTag,
   type OllamaTagsResponse,
 } from '../src/backends/ollama/client.js';
+import { loadQuantTable } from '../src/data.js';
 
 function loadFixture<T>(name: string): T {
   return JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf-8'));
@@ -150,5 +152,35 @@ describe('pullModel', () => {
       throw new Error('Error: pull model manifest: file does not exist');
     });
     await expect(pullModel('nonexistentmodel')).rejects.not.toThrow(/looks like a Hugging Face repo id/);
+  });
+});
+
+describe('quantFromTag', () => {
+  const table = loadQuantTable();
+
+  it('reads a known quant off an hf.co tag', () => {
+    expect(
+      quantFromTag('hf.co/yuxinlu1/gemma-4-12B-agentic-GGUF:Q4_K_M', table)
+    ).toBe('Q4_K_M');
+  });
+
+  it('resolves an alias to its canonical id', () => {
+    expect(quantFromTag('hf.co/o/r:bf16', table)).toBe('F16');
+  });
+
+  it('returns null for a tag that is not a quantization', () => {
+    expect(quantFromTag('hf.co/o/r:latest', table)).toBeNull();
+    expect(quantFromTag('gemma3:12b', table)).toBeNull();
+    expect(quantFromTag('cyborgxx101/gemma-4-12b-mlx:4bit', table)).toBeNull();
+  });
+
+  it('returns null when there is no tag at all', () => {
+    expect(quantFromTag('mistrallite', table)).toBeNull();
+  });
+
+  it('ignores a colon that belongs to a namespace rather than a tag', () => {
+    // Delegated to splitModelTag; asserted here so the behaviour is pinned at
+    // this layer too, not just in the helper's own tests.
+    expect(quantFromTag('hf.co/owner:weird/repo', table)).toBeNull();
   });
 });

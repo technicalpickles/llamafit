@@ -16,12 +16,14 @@ import {
   isCloudModel,
   parseParameterSize,
   normalizeQuant,
+  quantFromTag,
   type OllamaTagsResponse,
   type OllamaPsResponse,
 } from './client.js';
 import { scrapeSearch, type RemoteModelCandidate } from './scrape.js';
 import { searchGgufModels, type HfCandidate } from '../../hf/discovery.js';
 import { hfCandidatesToModelInfo } from '../../hf/model-info.js';
+import { loadQuantTable } from '../../data.js';
 
 export function mapTagsToLocalModels(tags: OllamaTagsResponse): LocalModels {
   const models: ModelInfo[] = [];
@@ -40,7 +42,9 @@ export function mapTagsToLocalModels(tags: OllamaTagsResponse): LocalModels {
       source: 'local',
       url: null,
       parameterSizeB: parseParameterSize(model.details.parameter_size),
-      quantizationLevel: normalizeQuant(model.details.quantization_level),
+      quantizationLevel:
+        normalizeQuant(model.details.quantization_level) ??
+        quantFromTag(model.name, loadQuantTable()),
       diskSizeBytes: model.size,
     });
   }
