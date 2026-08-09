@@ -8,6 +8,8 @@ import {
   mapCandidates,
 } from '../../src/backends/ollama/index.js';
 import { parseSearchResults } from '../../src/backends/ollama/scrape.js';
+import { mapHitToCandidate, type HfModelHit } from '../../src/hf/discovery.js';
+import { hfCandidatesToModelInfo } from '../../src/hf/model-info.js';
 
 export function loadJsonFixture<T>(name: string): T {
   return JSON.parse(readFileSync(new URL(`../fixtures/${name}`, import.meta.url), 'utf-8')) as T;
@@ -38,9 +40,22 @@ export function fixtureBackend(overrides: Partial<Backend> = {}): Backend {
       loadDurationSeconds: 1,
       totalDurationSeconds: 6,
     }),
+    // Mirrors the real ollama backend: ollama.com scrape plus Hugging Face,
+    // concatenated, both through the production mapping functions. The HF half
+    // is what carries availableQuants and signals — without it, nothing in the
+    // guardrail exercises the quant-picking, ranking, or dedup paths.
     remoteCandidates: async (query?: string) => ({
-      candidates: mapCandidates(parseSearchResults(loadTextFixture('ollama-search-mlx.html'))),
-      sources: [{ id: 'ollama.com', query: query ?? 'mlx', ok: true }],
+      candidates: [
+        ...mapCandidates(parseSearchResults(loadTextFixture('ollama-search-mlx.html'))),
+        ...hfCandidatesToModelInfo(
+          loadJsonFixture<HfModelHit[]>('hf-models-search.json').map(mapHitToCandidate),
+          (c) => `hf.co/${c.repoId}`
+        ),
+      ],
+      sources: [
+        { id: 'ollama.com', query: query ?? '', ok: true },
+        { id: 'huggingface', query: query ?? '', ok: true },
+      ],
     }),
     loadedModels: async () => mapPsToLoaded(loadJsonFixture<OllamaPsResponse>('api-ps-loaded.json')),
     pull: async () => {},

@@ -498,6 +498,12 @@ describe('remote discovery reporting', () => {
     );
     const remote = result.rows.filter((r) => r.source === 'remote');
     expect(remote.length).toBeGreaterThan(0);
-    expect(remote.every((r) => r.discoverySource === 'ollama.com')).toBe(true);
+    // fixtureBackend mirrors the real backend's two sources (ollama.com scrape
+    // + Hugging Face), so remote rows split across both discoverySources.
+    expect(remote.some((r) => r.discoverySource === 'ollama.com')).toBe(true);
+    expect(remote.some((r) => r.discoverySource === 'huggingface')).toBe(true);
+    expect(remote.every((r) => r.discoverySource === 'ollama.com' || r.discoverySource === 'huggingface')).toBe(
+      true
+    );
   });
 });
