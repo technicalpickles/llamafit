@@ -1419,7 +1419,59 @@ In the `CheckRow` interface:
 
 Then add `fit: fitGroup(<baseline>, <current>)` to each of the four `CheckRow` object literals in `runCheck` (the measured-local branch, the null-params local branch, the estimated-local branch, and the remote branch), using that branch's own verdict values. For the null-params branch both are `'unknown'`, so `fit: 'unclassified'`.
 
-- [ ] **Step 5: Fix the hand-built row literals in the tests**
+- [ ] **Step 5: Project `alsoTagged` from `ModelInfo` onto `CheckRow`**
+
+**Plan defect found during execution** (Task 3's implementer caught it): Task 3 sets `alsoTagged` on `ModelInfo`, but `CheckRow` is a separate interface and nothing projected the field across — so the collapsed tags never reached rendering, and Task 11's `cells()` would read `r.alsoTagged` off a row that never had it. It was dead data. Task 3's tests didn't catch it because they assert on `mapTagsToLocalModels` output, not on `runCheck`. Assigned here because this task already touches `CheckRow` and every literal in `runCheck`.
+
+Add to the `CheckRow` interface:
+
+```ts
+  /** Other tags pointing at the same weights, collapsed by the backend. Absent
+   * when there are none, so --json output stays byte-identical for single-tag
+   * models. Display-only — the collapse decision already happened upstream. */
+  alsoTagged?: string[];
+```
+
+Populate it on the **three local** branches only (remote candidates have no tags to collapse), spreading conditionally so the key stays absent rather than becoming `undefined`:
+
+```ts
+        ...(model.alsoTagged !== undefined ? { alsoTagged: model.alsoTagged } : {}),
+```
+
+Do **not** project `digest`. It is an internal grouping key with no display use, and adding it to `CheckRow` would change `--json` output for every row to no purpose.
+
+Add a test to `test/check.test.ts` pinning the projection end to end — the gap existed precisely because nothing tested this seam:
+
+```ts
+it('carries collapsed tags through to the check row', async () => {
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend(),
+    probe: fixtureProbe(SYSTEM),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  const collapsed = result.rows.find((r) => r.name.includes('gemma-4-12B-agentic'));
+  expect(collapsed?.alsoTagged).toEqual([
+    'hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:latest',
+  ]);
+});
+
+it('leaves alsoTagged absent on a single-tag model', async () => {
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend(),
+    probe: fixtureProbe(SYSTEM),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  const single = result.rows.find((r) => r.name === 'gemma3:12b');
+  expect(single).toBeDefined();
+  expect('alsoTagged' in single!).toBe(false);
+});
+```
+
+Reuse the `SYSTEM`/binding names already present in `test/check.test.ts`.
+
+- [ ] **Step 6: Fix the hand-built row literals in the tests**
 
 `fit` is required, so every hand-built `CheckRow` literal stops typechecking — and `npm test` alone will not tell you, because vitest transpiles without typechecking. `test/format.test.ts` has 9 such literals; `test/check.test.ts` has 1.
 
@@ -1427,21 +1479,23 @@ Run `npm run typecheck` to get the exact list, then add the correct `fit` value 
 
 `test/formula-estimator.test.ts` builds `Estimate` objects, not `CheckRow`s, so it needs no change.
 
-- [ ] **Step 6: Run it and confirm it passes**
+- [ ] **Step 7: Run it and confirm it passes**
 
 Run: `npx vitest run test/check.test.ts`
 Expected: PASS
 
-- [ ] **Step 7: Full suite and snapshot refresh**
+- [ ] **Step 8: Full suite and snapshot refresh**
 
-Run: `npm test` → `guardrail-check.json` FAILs (new field on every row); the table snapshot should be unchanged. Refresh with `-u`.
+Run: `npm test` → `guardrail-check.json` FAILs (new `fit` field on every row, plus `alsoTagged` on the collapsed row); the table snapshot should be unchanged, since `fit` is not rendered until Task 11. Refresh with `-u`.
 
-- [ ] **Step 8: Typecheck both configs**
+The `alsoTagged` appearing in `guardrail-check.json` is the visible proof the Step 5 projection works — Task 3's snapshot refresh did **not** show it, which is how the gap was found.
+
+- [ ] **Step 9: Typecheck both configs**
 
 Run: `npm run typecheck && npm run build`
-Expected: both clean. If `typecheck` still reports missing `fit`, Step 5 is incomplete.
+Expected: both clean. If `typecheck` still reports missing `fit`, Step 6 is incomplete.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add src/check.ts test/check.test.ts test/format.test.ts test/fixtures/guardrail-check.json
