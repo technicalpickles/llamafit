@@ -176,7 +176,9 @@ describe('collapseByDigest', () => {
   it('leaves distinct digests alone and sets no alsoTagged', () => {
     const out = collapseByDigest([local('a:1', 'aaa'), local('b:1', 'bbb')]);
     expect(out.map((m) => m.name)).toEqual(['a:1', 'b:1']);
-    expect(out[0].alsoTagged).toBeUndefined();
+    // Genuine absence, not present-but-undefined -- JSON.stringify drops
+    // absent keys, which is what keeps `check --json` byte-identical.
+    expect('alsoTagged' in out[0]).toBe(false);
   });
 
   it('passes through models with no digest, one row each', () => {
@@ -202,6 +204,44 @@ it('collapses the two hf.co tags in the real tags fixture', () => {
   expect(agentic[0].alsoTagged).toEqual([
     'hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:latest',
   ]);
+});
+
+function taggedModel(name: string, digest: string) {
+  return {
+    name,
+    model: name,
+    modified_at: '',
+    size: 0,
+    digest,
+    details: {
+      parent_model: '',
+      format: 'gguf',
+      family: 'x',
+      families: null,
+      parameter_size: '7B',
+      quantization_level: 'unknown',
+    },
+    capabilities: [],
+  };
+}
+
+// Pins the quant-resolution-before-collapse ordering. The quant-bearing tag
+// (':Q4_K_M') must be both longer than and later than the alternative
+// (':v2') so that collapsing before quant resolution -- where every
+// quantizationLevel is still null -- would pick ':v2' by the shortest-name
+// fallback instead. Neither tag's manifest reports a quant, so the tag is
+// the only source; getting the order wrong silently loses it.
+it('resolves quant from the tag before collapsing, not after', () => {
+  const { models } = mapTagsToLocalModels({
+    models: [
+      taggedModel('hf.co/o/r:v2', 'aaa'),
+      taggedModel('hf.co/o/r:Q4_K_M', 'aaa'),
+    ],
+  });
+  expect(models).toHaveLength(1);
+  expect(models[0].name).toMatch(/:Q4_K_M$/);
+  expect(models[0].quantizationLevel).toBe('Q4_K_M');
+  expect(models[0].alsoTagged).toEqual(['hf.co/o/r:v2']);
 });
 
 describe('ollamaBackend remoteCandidates (two sources)', () => {

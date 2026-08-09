@@ -26,11 +26,13 @@ import { hfCandidatesToModelInfo } from '../../hf/model-info.js';
 import { loadQuantTable } from '../../data.js';
 
 /** Two tags pointing at the same digest are the same weights, so they are one
- * row. Representative choice is deliberate and order-dependent: prefer a tag
- * whose quantization resolved (which, after quantFromTag, means the tag itself
- * named a quant), else the shortest name. Picking "shortest" unconditionally
- * would choose `:latest` over `:Q4_K_M` and throw away the only tag carrying
- * that information -- hence this runs after quant resolution, not before. */
+ * row. Representative choice prefers a tag whose quantization already
+ * resolved -- which only means something if this runs after quant resolution,
+ * not before. Run it before, and every candidate's quantizationLevel is still
+ * null at collapse time, so that preference can never fire; the fallback is
+ * shortest-name with an insertion-order tie-break, which for same-length tags
+ * (e.g. `:latest` and `:Q4_K_M`, both 6 chars after the colon) is decided by
+ * fixture ordering, not by anything meaningful. */
 export function collapseByDigest(models: ModelInfo[]): ModelInfo[] {
   const groups = new Map<string, ModelInfo[]>();
   const out: ModelInfo[] = [];
