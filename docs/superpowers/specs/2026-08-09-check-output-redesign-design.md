@@ -235,11 +235,19 @@ two derived groups for the disagreement cases:
 severity: comfortable(0) < tight(1) < will-thrash(2)
 
 group(baseline, current):
-  baseline == 'unknown'                     -> 'unclassified'
-  severity(current) > severity(baseline)     -> 'pressured'
-  baseline == 'will-thrash'                  -> 'over-budget'   // current is better
-  otherwise                                  -> baseline        // 'comfortable' | 'tight' | 'will-thrash'
+  baseline == 'unknown'                            -> 'unclassified'
+  current  == 'unknown'                            -> baseline
+  severity(current) > severity(baseline)            -> 'pressured'
+  baseline == 'will-thrash'
+      && severity(current) < severity(will-thrash)  -> 'over-budget'
+  otherwise                                         -> baseline
 ```
+
+The `over-budget` branch must test that `current` is **strictly better** than
+`will-thrash`. Testing only `baseline == 'will-thrash'` sends
+`(will-thrash, will-thrash)` — a model that fits nowhere — into a group
+labelled "fits right now", because equal severities do not trip the
+`pressured` branch above it. That case is a required test.
 
 Total and deterministic. Rendered order and labels, where *B* is baseline
 headroom and *C* is current headroom:
