@@ -345,6 +345,39 @@ describe('runCheck', () => {
     ]);
   });
 
+  it('orders remote rows by downloads descending, nulls last', async () => {
+    const result = await runCheck('mlx', {
+      backend: fixtureBackend({
+        remoteCandidates: async () => ({
+          candidates: [
+            { name: 'few', source: 'remote', url: null, parameterSizeB: 7, quantizationLevel: 'Q4_K_M', diskSizeBytes: null, signals: { downloads: 10, likes: 0, trendingScore: 99, lastModified: null } },
+            { name: 'none', source: 'remote', url: null, parameterSizeB: 7, quantizationLevel: 'Q4_K_M', diskSizeBytes: null, signals: { downloads: null, likes: 0, trendingScore: 50, lastModified: null } },
+            { name: 'many', source: 'remote', url: null, parameterSizeB: 7, quantizationLevel: 'Q4_K_M', diskSizeBytes: null, signals: { downloads: 5000, likes: 0, trendingScore: 1, lastModified: null } },
+          ],
+          sources: [{ id: 'huggingface', query: '', ok: true }],
+        }),
+      }),
+      probe: fixtureProbe(fakeSystem),
+      estimator: formulaEstimator,
+      gaps: new GapCollector(),
+    });
+
+    const remote = result.rows.filter((r) => r.source === 'remote').map((r) => r.name);
+    expect(remote).toEqual(['many', 'few', 'none']);
+  });
+
+  it('keeps local rows ahead of remote rows', async () => {
+    const result = await runCheck('mlx', {
+      backend: fixtureBackend(),
+      probe: fixtureProbe(fakeSystem),
+      estimator: formulaEstimator,
+      gaps: new GapCollector(),
+    });
+    const firstRemote = result.rows.findIndex((r) => r.source === 'remote');
+    const lastLocal = result.rows.map((r) => r.source).lastIndexOf('local');
+    expect(lastLocal).toBeLessThan(firstRemote);
+  });
+
   it('produces no measured rows when the backend lacks loadedModels', async () => {
     const result = await runCheck(
       'mlx',

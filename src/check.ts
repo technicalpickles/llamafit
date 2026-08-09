@@ -205,8 +205,16 @@ export async function runCheck(query: string | undefined, deps: CheckDeps): Prom
       };
     });
 
+  // The HF API sorts by trendingScore, which rewards novelty: in the checked-in
+  // fixture it ranks a 928-download 0.1B model above a 4.5M-download 9B one.
+  // downloads is already in the payload and answers "is this worth pulling"
+  // far better. trendingScore stays on the row for --json consumers.
+  const rankedRemoteRows = [...remoteRows].sort(
+    (a, b) => (b.signals?.downloads ?? -1) - (a.signals?.downloads ?? -1)
+  );
+
   return {
-    rows: [...localRows, ...remoteRows],
+    rows: [...localRows, ...rankedRemoteRows],
     cloudModels,
     system,
     baselineHeadroomGb,
