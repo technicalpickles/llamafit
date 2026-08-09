@@ -9,6 +9,8 @@ import { GapCollector } from '../src/gaps.js';
 import { mapTagsToLocalModels } from '../src/backends/ollama/index.js';
 import { fixtureBackend, fixtureProbe, loadJsonFixture } from './helpers/fixture-backend.js';
 import { REMOTE_GUIDANCE } from '../src/hf/guidance.js';
+import { hfCandidatesToModelInfo } from '../src/hf/model-info.js';
+import type { HfCandidate } from '../src/hf/discovery.js';
 
 const fakeSystem: SystemMemoryState = {
   totalGb: 24,
@@ -119,6 +121,41 @@ describe('runCheck', () => {
     expect(row!.quantizationLevel).toBe('Q4_K_M'); // fallback, unknown quant
     // remote candidate with no parsed size should be excluded, not shown with a bogus estimate
     expect(result.rows.find((r) => r.name === 'mistral-large-3')).toBeUndefined();
+  });
+
+  it('routes an HF candidate through hfCandidatesToModelInfo end-to-end so quantKnown flips true', async () => {
+    // Regression guard for the remote-real-quants change: a repo that actually
+    // publishes the table's fallback quant should reach runCheck with a known
+    // quantizationLevel, not the blind Q4_K_M? guess. Built from a real
+    // HfCandidate through the real mapper, not a hand-written ModelInfo.
+    const hfCandidate: HfCandidate = {
+      repoId: 'ornith-ai/Ornith-1.0-9B-GGUF',
+      author: 'ornith-ai',
+      url: 'https://huggingface.co/ornith-ai/Ornith-1.0-9B-GGUF',
+      parameterSizeB: 9,
+      availableQuants: ['Q4_K_M', 'Q5_K_M', 'Q6_K', 'Q8_0', 'BF16'],
+      signals: { downloads: 1, likes: 1, trendingScore: 1, lastModified: null },
+    };
+    const remote = hfCandidatesToModelInfo(
+      [hfCandidate],
+      (c) => `hf.co/${c.repoId}`
+    );
+    const result = await runCheck(
+      'mlx',
+      makeDeps({
+        backend: fixtureBackend({
+          loadedModels: async () => [],
+          remoteCandidates: async () => ({
+            candidates: remote,
+            sources: [{ id: 'huggingface', query: '', ok: true }],
+          }),
+        }),
+      })
+    );
+    const row = result.rows.find((r) => r.name === 'hf.co/ornith-ai/Ornith-1.0-9B-GGUF');
+    expect(row).toBeDefined();
+    expect(row!.quantizationLevel).toBe('Q4_K_M');
+    expect(row!.quantKnown).toBe(true);
   });
 
   it('uses the real size_vram for a model that is currently loaded, marked measured', async () => {

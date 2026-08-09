@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { hfCandidatesToModelInfo, pickQuant } from '../src/hf/model-info.js';
 import { mapHitToCandidate, type HfModelHit } from '../src/hf/discovery.js';
-import { loadQuantTable, type QuantTable } from '../src/data.js';
+import { loadQuantTable, lookupQuant, type QuantTable } from '../src/data.js';
 
 function loadHits(): HfModelHit[] {
   return JSON.parse(
@@ -27,6 +27,20 @@ describe('hfCandidatesToModelInfo', () => {
     const rows = hfCandidatesToModelInfo(candidates, (c) => c.repoId);
     expect(rows.every((r) => r.diskSizeBytes === null)).toBe(true);
   });
+
+  it('sets a non-null quantizationLevel for every real repo that publishes a table-known quant', () => {
+    const table = loadQuantTable();
+    const rows = hfCandidatesToModelInfo(candidates, (c) => c.repoId);
+    for (const row of rows) {
+      const candidate = candidates.find((c) => c.repoId === row.name)!;
+      const offersKnownQuant = candidate.availableQuants.some((q) => lookupQuant(table, q).known);
+      expect(row.quantizationLevel !== null).toBe(offersKnownQuant);
+    }
+    // Anchor on a specific real repo rather than only the aggregate check above.
+    const ornith = rows.find((r) => r.name === 'ornith-ai/Ornith-1.0-9B-GGUF');
+    expect(ornith).toBeDefined();
+    expect(ornith!.quantizationLevel).toBe('Q4_K_M');
+  });
 });
 
 describe('pickQuant', () => {
@@ -41,7 +55,10 @@ describe('pickQuant', () => {
     expect(pickQuant(['Q8_0', 'Q5_K_M', 'Q4_0'], table)).toBe('Q4_0');
   });
 
-  it('resolves an alias of the fallback to the canonical id', () => {
+  it('resolves an alias to its canonical id via the nearest-match branch', () => {
+    // MXFP4 is an alias of Q4_0, not of the fallback Q4_K_M -- this exercises
+    // alias resolution inside the nearest-bytes-per-param branch, not the
+    // fallback-preferred branch.
     expect(pickQuant(['MXFP4'], table)).toBe('Q4_0');
   });
 
