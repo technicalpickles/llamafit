@@ -753,7 +753,7 @@ describe('pickQuant', () => {
     expect(pickQuant(['Q8_0', 'Q5_K_M', 'Q4_0'], table)).toBe('Q4_0');
   });
 
-  it('resolves an alias of the fallback to the canonical id', () => {
+  it('resolves an alias to its canonical id via the nearest-match branch', () => {
     expect(pickQuant(['MXFP4'], table)).toBe('Q4_0');
   });
 
