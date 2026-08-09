@@ -40,7 +40,10 @@ export interface Backend {
   loadedModels?(): Promise<LoadedModel[]>;
   /** onProgress is best-effort UI plumbing: it may never fire (a download can
    * complete before any progress event), and implementations need not guard
-   * against it throwing. */
-  pull?(model: string, onProgress?: (p: PullProgress) => void): Promise<void>;
+   * against it throwing. Returns the id the model was actually registered
+   * under when that can differ from what was requested (e.g. llama-server
+   * auto-picking a quant for a bare multi-quant HF repo) — callers must use
+   * that id for calls after pull, not the original request. */
+  pull?(model: string, onProgress?: (p: PullProgress) => void): Promise<string | void>;
   unload?(model: string): Promise<void>;
 }

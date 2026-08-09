@@ -47,13 +47,20 @@ export async function runBench(model: string, deps: BenchDeps): Promise<BenchRes
 
   const { models: local } = await backend.localModels();
   const alreadyPulled = local.some((m) => matchesModelTarget(m.name, model));
+  // The id used for every call after this point. Ollama's API resolves a bare name
+  // itself, so an already-present model keeps the raw request (Ollama's pull() never
+  // returns a resolved id). llama-server has no such resolution and can register a
+  // pull under a different id than requested (e.g. auto-picking a quant for a bare
+  // multi-quant HF repo) — when pull() reports that id back, generate/unload must use
+  // it or they 400 against an id nothing is actually registered under.
+  let resolvedModel = model;
   if (!alreadyPulled) {
     if (!backend.pull) {
       throw new Error(
         `${backend.displayName} can't pull models — pull '${model}' yourself, then re-run`
       );
     }
-    await backend.pull(model);
+    resolvedModel = (await backend.pull(model)) || model;
   }
 
   if (!backend.loadedModels) {
@@ -62,7 +69,7 @@ export async function runBench(model: string, deps: BenchDeps): Promise<BenchRes
     );
   }
   if (!backend.unload) {
-    notes.push(`${backend.displayName} can't unload models — '${model}' is still loaded`);
+    notes.push(`${backend.displayName} can't unload models — '${resolvedModel}' is still loaded`);
   }
 
   const memoryBefore = await probe.read();
@@ -76,10 +83,10 @@ export async function runBench(model: string, deps: BenchDeps): Promise<BenchRes
   let sizeVramGb: number | null = null;
   let memoryAfter: SystemMemoryState;
   try {
-    response = await backend.generate(model, BENCH_PROMPT, GENERATE_TIMEOUT_MS);
+    response = await backend.generate(resolvedModel, BENCH_PROMPT, GENERATE_TIMEOUT_MS);
     if (backend.loadedModels) {
       const loaded = await backend.loadedModels();
-      const running = loaded.find((m) => matchesModelTarget(m.name, model));
+      const running = loaded.find((m) => matchesModelTarget(m.name, resolvedModel));
       sizeVramGb = running ? running.sizeVramGb : null;
     }
     memoryAfter = await probe.read();
@@ -90,9 +97,9 @@ export async function runBench(model: string, deps: BenchDeps): Promise<BenchRes
     // confusing unload failure instead. Note it and move on.
     if (backend.unload) {
       try {
-        await backend.unload(model);
+        await backend.unload(resolvedModel);
       } catch (err) {
-        notes.push(`${backend.displayName} failed to unload '${model}': ${(err as Error).message}`);
+        notes.push(`${backend.displayName} failed to unload '${resolvedModel}': ${(err as Error).message}`);
       }
     }
   }

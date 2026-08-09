@@ -236,6 +236,28 @@ describe('pullModel', () => {
     expect(seen).toEqual([]); // other model's progress and failure both ignored
   });
 
+  it('resolves to the auto-picked quant id when the repo requires one and the request omitted it', async () => {
+    // Real llama-server behavior for a valid multi-quant HF repo pulled without a
+    // quant suffix: it auto-picks one (observed live, b10280 2026-08-06) and
+    // registers the model under `<repo>:<quant>`, not the bare repo id that was
+    // requested. The bare id then never appears in /models, which the old
+    // exact-match check mistook for "repo/quant doesn't exist" even though the
+    // pull fully succeeded.
+    const BARE_MODEL = 'yuxinlu1/gemma-4-12B-agentic-GGUF';
+    const RESOLVED_ID = 'yuxinlu1/gemma-4-12B-agentic-GGUF:Q4_K_M';
+    const resolved = await withFetch(
+      routedFetch({
+        'GET /models/sse': () =>
+          new Response(sseBody(event({ model: BARE_MODEL, event: 'download_finished' })), { status: 200 }),
+        'POST /models': () => new Response(JSON.stringify({ success: true }), { status: 200 }),
+        'GET /models': () =>
+          new Response(JSON.stringify({ data: [modelEntry(RESOLVED_ID)], object: 'list' }), { status: 200 }),
+      }),
+      () => pullModel(BARE_MODEL)
+    );
+    expect(resolved).toBe(RESOLVED_ID);
+  });
+
   it('throws when download_finished fires but the model never appears in the model list', async () => {
     // Real llama-server behavior for a nonexistent repo/quant: POST /models
     // returns 2xx and the SSE stream reports download_finished (never

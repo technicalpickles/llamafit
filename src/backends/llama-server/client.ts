@@ -159,7 +159,7 @@ interface DownloadFileProgress {
 export async function pullModel(
   model: string,
   onProgress?: (p: PullProgress) => void
-): Promise<void> {
+): Promise<string> {
   const sseRes = await llamaServerRequest('/models/sse');
   if (!sseRes.body) {
     throw new Error(`llama-server returned no body for /models/sse`);
@@ -201,13 +201,21 @@ export async function pullModel(
         // (never download_failed) and then silently never adds the model —
         // captured live against llama-server b10280, 2026-08-06. Verify the
         // model actually landed before declaring success.
+        //
+        // A repo request with no quant suffix that has multiple GGUF files
+        // doesn't necessarily land under the requested id either: the router
+        // auto-picks a quant and registers the model as `<model>:<quant>` —
+        // also captured live, same version/date. Accept that resolved id and
+        // hand it back so callers use the id that actually exists for
+        // subsequent generate/unload calls.
         const result = await fetchModels();
-        if (!result.data.some((m) => m.id === model)) {
+        const found = result.data.find((m) => m.id === model || m.id.startsWith(`${model}:`));
+        if (!found) {
           throw new Error(
             `llama-server reported the download of '${model}' finished, but it never appeared in the model list — does that repo/quant exist?`
           );
         }
-        return;
+        return found.id;
       }
     }
     throw new Error(

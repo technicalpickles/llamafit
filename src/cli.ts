@@ -58,8 +58,9 @@ function withProgress(backend: Backend, color: boolean): Backend {
       ? async (model) => {
           const startedAt = Date.now();
           const spinner = startSpinner(`Pulling ${model}...`);
+          let resolved: string | void;
           try {
-            await pull(model, (p) => {
+            resolved = await pull(model, (p) => {
               spinner.update(`Pulling ${model}... ${formatPullProgress(p)}`);
             });
           } catch (err) {
@@ -68,6 +69,7 @@ function withProgress(backend: Backend, color: boolean): Backend {
           }
           const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
           spinner.stop(success(`Pulled ${model} (${elapsed}s)`, color));
+          return resolved;
         }
       : undefined,
     generate: async (model, prompt, timeoutMs) => {

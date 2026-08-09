@@ -203,6 +203,42 @@ describe('runBench', () => {
     expect(pullCalled).toBe(true);
   });
 
+  it('uses the id pull() resolves to for generate/loadedModels/unload, not the raw request', async () => {
+    // llama-server auto-picks a quant for a multi-quant HF repo pulled without one and
+    // registers the model under `<repo>:<quant>` — a different id than what was
+    // requested. pull() surfaces that resolved id; every call after pull must use it or
+    // generate()/unload() 400 with "model not found" against the id nothing actually has.
+    const generatedWith: string[] = [];
+    const unloadedWith: string[] = [];
+
+    const result = await runBench('yuxinlu1/gemma-4-12B-agentic-GGUF', {
+      backend: fixtureBackend({
+        localModels: async () => ({ models: [], skipped: [] }),
+        loadedModels: async () => [
+          { name: 'yuxinlu1/gemma-4-12B-agentic-GGUF:Q4_K_M', sizeVramGb: 8.5, quantizationLevel: 'Q4_K_M' },
+        ],
+        generate: async (model) => {
+          generatedWith.push(model);
+          return {
+            evalCount: 100,
+            evalDurationSeconds: 4,
+            loadDurationSeconds: 1,
+            totalDurationSeconds: 6,
+          };
+        },
+        pull: async () => 'yuxinlu1/gemma-4-12B-agentic-GGUF:Q4_K_M',
+        unload: async (model) => {
+          unloadedWith.push(model);
+        },
+      }),
+      probe: fixtureProbe(SYSTEM),
+    });
+
+    expect(generatedWith).toEqual(['yuxinlu1/gemma-4-12B-agentic-GGUF:Q4_K_M']);
+    expect(unloadedWith).toEqual(['yuxinlu1/gemma-4-12B-agentic-GGUF:Q4_K_M']);
+    expect(result.sizeVramGb).toBeCloseTo(8.5, 2);
+  });
+
   it('degrades without loadedModels: null vram plus a note', async () => {
     const result = await runBench('gemma3:12b', {
       backend: fixtureBackend({ loadedModels: undefined }),
