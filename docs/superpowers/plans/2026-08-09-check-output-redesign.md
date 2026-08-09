@@ -923,6 +923,108 @@ when the repo offers it, else nearest bytes-per-param."
 
 ---
 
+## Task 4b: `fixture-hf-coverage`
+
+**Added during execution.** Task 4's implementer reported that the guardrail snapshots did not change, and was right to be suspicious. `fixtureBackend()`'s `remoteCandidates` returns only `mapCandidates(parseSearchResults('ollama-search-mlx.html'))` — scrape candidates. Verified: all 16 remote rows in `guardrail-check.json` have `discoverySource: 'ollama.com'` and **zero** carry `signals`. So `hfCandidatesToModelInfo` has no end-to-end coverage at all.
+
+That blinds four tasks, not one:
+
+| Task | What it needs that scrape rows cannot provide |
+| --- | --- |
+| 4 `remote-real-quants` | `availableQuants` — scrape candidates have none |
+| 5 `remote-rank` | `signals.downloads` — only HF supplies it |
+| 6 `remote-filter` | `hf.co/<repo>` pull names, which is what dedup matches on |
+| 11 `render-sections` | the downloads column |
+
+It also becomes actively misleading after Task 7, which makes HF the default source and drops the scraper to `--query` only: the fixture would model a path the default no longer takes.
+
+Slug-named rather than renumbered to Task 5, so every later task keeps its number and no existing cross-reference rots.
+
+**Files:**
+- Modify: `test/helpers/fixture-backend.ts`
+- Test: `test/output-guardrail.test.ts` (snapshots), plus any count assertions
+
+**Interfaces:**
+- Consumes: `hfCandidatesToModelInfo` (`src/hf/model-info.js`), `mapHitToCandidate` (`src/hf/discovery.js`), the `hf-models-search.json` fixture
+- Produces: `fixtureBackend()` returning candidates from **both** sources with two source reports, matching what the real ollama backend does
+
+- [ ] **Step 1: Make the fixture backend mirror the real backend's two-source shape**
+
+The real `ollamaBackend.remoteCandidates` queries `ollama.com` and Hugging Face and concatenates both. Mirror that, running the HF fixture through the *same* mapping functions the real backend uses, so a mapping bug cannot hide behind hand-rolled test data — the property the existing helper's docstring already claims.
+
+In `test/helpers/fixture-backend.ts`:
+
+```ts
+import { mapHitToCandidate, type HfModelHit } from '../../src/hf/discovery.js';
+import { hfCandidatesToModelInfo } from '../../src/hf/model-info.js';
+```
+
+and replace the `remoteCandidates` stub with:
+
+```ts
+    // Mirrors the real ollama backend: ollama.com scrape plus Hugging Face,
+    // concatenated, both through the production mapping functions. The HF half
+    // is what carries availableQuants and signals — without it, nothing in the
+    // guardrail exercises the quant-picking, ranking, or dedup paths.
+    remoteCandidates: async (query?: string) => ({
+      candidates: [
+        ...mapCandidates(parseSearchResults(loadTextFixture('ollama-search-mlx.html'))),
+        ...hfCandidatesToModelInfo(
+          loadJsonFixture<HfModelHit[]>('hf-models-search.json').map(mapHitToCandidate),
+          (c) => `hf.co/${c.repoId}`
+        ),
+      ],
+      sources: [
+        { id: 'ollama.com', query: query ?? '', ok: true },
+        { id: 'huggingface', query: query ?? '', ok: true },
+      ],
+    }),
+```
+
+The `hf.co/${c.repoId}` pull-name shape matches ollama's `hfPullName`. This also lands Task 7's `query ?? ''` change to this helper early, which is fine — Task 7 Step 5 then has nothing left to do here and should say so rather than redo it.
+
+- [ ] **Step 2: Run the suite and see what moves**
+
+Run: `npm test`
+
+Expect the guardrail snapshots to fail with 10 new remote rows, and expect some count assertions elsewhere to fail. Fix count assertions to their correct new values — never loosen them.
+
+- [ ] **Step 3: Refresh snapshots and verify the HF path is genuinely covered**
+
+Run: `npx vitest run test/output-guardrail.test.ts -u`
+
+Then confirm, by reading `test/fixtures/guardrail-check.json`:
+
+- Remote rows now include entries with `discoverySource: 'huggingface'`.
+- Those rows carry `signals` with real `downloads` values.
+- Those rows carry `availableQuants`.
+- **Their `quantizationLevel` is a real quant with `quantKnown: true`** — this is the end-to-end proof of Task 4 that was missing. `ornith-ai/Ornith-1.0-9B-GGUF` should show `Q4_K_M`, not `Q4_K_M?`.
+- Local rows are unchanged.
+
+If HF rows show `quantKnown: false`, Task 4 is not working end to end and this task has found a real bug — stop and report rather than committing.
+
+- [ ] **Step 4: Typecheck both configs**
+
+Run: `npm run typecheck && npm run build`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add test/helpers/fixture-backend.ts test/fixtures/ test/
+git commit -m "test: cover the Hugging Face path in the fixture backend
+
+fixtureBackend() returned only ollama.com scrape candidates, so all 16 remote
+rows in the guardrail carried no signals and no availableQuants -- meaning
+hfCandidatesToModelInfo had no end-to-end coverage, and the ranking, dedup,
+and downloads-column work that depends on HF metadata would have been
+snapshot-blind too.
+
+Now mirrors the real backend: both sources, concatenated, both through the
+production mapping functions."
+```
+
+---
+
 ## Task 5: `remote-rank`
 
 `signals.downloads` is fetched and never used. The HF API's own `trendingScore` sort put a 928-download 0.1B model above a 4.5M-download 9B one in the checked-in fixture.
@@ -1264,7 +1366,9 @@ In `src/backends/ollama/index.ts`, remove the `SCRAPE_DEFAULT_QUERY` declaration
 Run: `npx vitest run test/ollama-backend.test.ts -t "empty query"`
 Expected: PASS
 
-- [ ] **Step 5: Drop the `'mlx'` default from the test helper**
+- [ ] **Step 5: Drop the `'mlx'` default from the test helper** — *already done by Task 4b*
+
+Task 4b changed this helper's source reports to `query ?? ''` while adding HF coverage. Verify that is still the case and move on; do not redo it.
 
 In `test/helpers/fixture-backend.ts`, change the `remoteCandidates` stub's source report so it no longer invents a default:
 
