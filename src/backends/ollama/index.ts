@@ -25,6 +25,46 @@ import { searchGgufModels, type HfCandidate } from '../../hf/discovery.js';
 import { hfCandidatesToModelInfo } from '../../hf/model-info.js';
 import { loadQuantTable } from '../../data.js';
 
+/** Two tags pointing at the same digest are the same weights, so they are one
+ * row. Representative choice is deliberate and order-dependent: prefer a tag
+ * whose quantization resolved (which, after quantFromTag, means the tag itself
+ * named a quant), else the shortest name. Picking "shortest" unconditionally
+ * would choose `:latest` over `:Q4_K_M` and throw away the only tag carrying
+ * that information -- hence this runs after quant resolution, not before. */
+export function collapseByDigest(models: ModelInfo[]): ModelInfo[] {
+  const groups = new Map<string, ModelInfo[]>();
+  const out: ModelInfo[] = [];
+
+  for (const model of models) {
+    if (model.digest === undefined) {
+      out.push(model);
+      continue;
+    }
+    const existing = groups.get(model.digest);
+    if (existing) {
+      existing.push(model);
+    } else {
+      const group: ModelInfo[] = [model];
+      groups.set(model.digest, group);
+      // Placeholder holds this digest's slot so first-appearance order survives.
+      out.push(model);
+    }
+  }
+
+  return out.map((model) => {
+    if (model.digest === undefined) return model;
+    const group = groups.get(model.digest)!;
+    if (group.length === 1) return model;
+    const best =
+      group.find((m) => m.quantizationLevel !== null) ??
+      group.reduce((a, b) => (b.name.length < a.name.length ? b : a));
+    return {
+      ...best,
+      alsoTagged: group.filter((m) => m.name !== best.name).map((m) => m.name),
+    };
+  });
+}
+
 export function mapTagsToLocalModels(tags: OllamaTagsResponse): LocalModels {
   const models: ModelInfo[] = [];
   const skipped: LocalModels['skipped'] = [];
@@ -46,10 +86,11 @@ export function mapTagsToLocalModels(tags: OllamaTagsResponse): LocalModels {
         normalizeQuant(model.details.quantization_level) ??
         quantFromTag(model.name, loadQuantTable()),
       diskSizeBytes: model.size,
+      digest: model.digest,
     });
   }
 
-  return { models, skipped };
+  return { models: collapseByDigest(models), skipped };
 }
 
 export function mapPsToLoaded(ps: OllamaPsResponse): LoadedModel[] {

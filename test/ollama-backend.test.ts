@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { describeBackendConformance } from './conformance/backend.js';
-import { ollamaBackend, mapTagsToLocalModels } from '../src/backends/ollama/index.js';
+import { ollamaBackend, mapTagsToLocalModels, collapseByDigest } from '../src/backends/ollama/index.js';
 import { isFailedSource } from '../src/backends/types.js';
 import type { OllamaTagsResponse, OllamaPsResponse } from '../src/backends/ollama/client.js';
+import type { ModelInfo } from '../src/types.js';
 
 function loadFixture<T>(name: string): T {
   return JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf-8'));
@@ -61,12 +62,12 @@ describe('ollamaBackend mapping', () => {
   });
 
   it('recovers the quantization from an hf.co tag when the manifest says nothing', () => {
+    // The fixture's ':latest' tag on this digest reports no quant and is
+    // collapsed into the ':Q4_K_M' row (see 'collapses the two hf.co tags in
+    // the real tags fixture' below) -- only the quant-bearing row survives.
     const { models } = mapTagsToLocalModels(loadFixture<OllamaTagsResponse>('api-tags.json'));
     const tagged = models.find((m) => m.name.endsWith('-GGUF:Q4_K_M'));
     expect(tagged?.quantizationLevel).toBe('Q4_K_M');
-
-    const untagged = models.find((m) => m.name.endsWith('-GGUF:latest'));
-    expect(untagged?.quantizationLevel).toBeNull();
   });
 
   it('prefers a quantization the manifest did report over the tag', () => {
@@ -136,6 +137,71 @@ describe('ollamaBackend mapping', () => {
       { id: 'huggingface', query: 'qwen', ok: false, error: expect.any(String) },
     ]);
   });
+});
+
+function local(name: string, digest?: string, quant: string | null = null): ModelInfo {
+  return {
+    name,
+    source: 'local',
+    url: null,
+    parameterSizeB: 11.9,
+    quantizationLevel: quant,
+    diskSizeBytes: 1,
+    ...(digest !== undefined ? { digest } : {}),
+  };
+}
+
+describe('collapseByDigest', () => {
+  it('collapses two tags on one digest, preferring the quant-bearing tag', () => {
+    const out = collapseByDigest([
+      local('hf.co/o/r:latest', 'aaa', null),
+      local('hf.co/o/r:Q4_K_M', 'aaa', 'Q4_K_M'),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].name).toBe('hf.co/o/r:Q4_K_M');
+    expect(out[0].quantizationLevel).toBe('Q4_K_M');
+    expect(out[0].alsoTagged).toEqual(['hf.co/o/r:latest']);
+  });
+
+  it('falls back to the shortest name when no tag yields a quant', () => {
+    const out = collapseByDigest([
+      local('hf.co/o/r:some-long-tag', 'aaa', null),
+      local('hf.co/o/r:v2', 'aaa', null),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].name).toBe('hf.co/o/r:v2');
+    expect(out[0].alsoTagged).toEqual(['hf.co/o/r:some-long-tag']);
+  });
+
+  it('leaves distinct digests alone and sets no alsoTagged', () => {
+    const out = collapseByDigest([local('a:1', 'aaa'), local('b:1', 'bbb')]);
+    expect(out.map((m) => m.name)).toEqual(['a:1', 'b:1']);
+    expect(out[0].alsoTagged).toBeUndefined();
+  });
+
+  it('passes through models with no digest, one row each', () => {
+    const out = collapseByDigest([local('a:1'), local('b:1')]);
+    expect(out.map((m) => m.name)).toEqual(['a:1', 'b:1']);
+  });
+
+  it('preserves input order by first appearance of each digest', () => {
+    const out = collapseByDigest([
+      local('z:1', 'zzz'),
+      local('a:1', 'aaa'),
+      local('z:2', 'zzz'),
+    ]);
+    expect(out.map((m) => m.name)).toEqual(['z:1', 'a:1']);
+  });
+});
+
+it('collapses the two hf.co tags in the real tags fixture', () => {
+  const { models } = mapTagsToLocalModels(loadFixture<OllamaTagsResponse>('api-tags.json'));
+  const agentic = models.filter((m) => m.name.includes('gemma-4-12B-agentic'));
+  expect(agentic).toHaveLength(1);
+  expect(agentic[0].name).toMatch(/:Q4_K_M$/);
+  expect(agentic[0].alsoTagged).toEqual([
+    'hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:latest',
+  ]);
 });
 
 describe('ollamaBackend remoteCandidates (two sources)', () => {

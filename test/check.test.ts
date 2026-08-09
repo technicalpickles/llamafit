@@ -44,7 +44,7 @@ describe('runCheck', () => {
 
     expect(result.rows.every((r) => r.source !== 'local' || !r.name.includes(':cloud'))).toBe(true);
     expect(result.cloudModels).toContain('glm-5.2:cloud');
-    expect(result.rows.filter((r) => r.source === 'local').length).toBe(6);
+    expect(result.rows.filter((r) => r.source === 'local').length).toBe(5);
   });
 
   it('computes baseline headroom as total minus the fixed macOS reserve', async () => {
@@ -79,7 +79,7 @@ describe('runCheck', () => {
       })
     );
     expect(result.scrapeWarning).toMatch(/network unreachable/);
-    expect(result.rows.filter((r) => r.source === 'local').length).toBe(6);
+    expect(result.rows.filter((r) => r.source === 'local').length).toBe(5);
   });
 
   it('includes remote candidates with a parsed size, using the unknown-quant fallback', async () => {
