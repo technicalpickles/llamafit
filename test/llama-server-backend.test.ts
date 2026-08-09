@@ -120,9 +120,9 @@ describe('hfCandidatesToModelInfo (llama-server name shape)', () => {
       source: 'remote',
       url: 'https://huggingface.co/unsloth/Qwen3.5-9B-GGUF',
       parameterSizeB: 8.95,
-      // Repos ship many quants; no single quant describes the repo. The
-      // estimator's fallback covers the estimate, availableQuants covers pulling.
-      quantizationLevel: null,
+      // The repo publishes the table's fallback quant, so the estimate rests
+      // on a quantization the repo actually ships rather than a blind guess.
+      quantizationLevel: 'Q4_K_M',
       diskSizeBytes: null,
       author: 'unsloth',
       availableQuants: ['Q4_K_M', 'Q8_0'],
