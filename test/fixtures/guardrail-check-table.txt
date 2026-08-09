@@ -3,6 +3,8 @@ cyborgxx101/gemma-4-12b-opus-finetuned-mlx:4bit                                 
 gemma3:12b                                                                         local   12.2       Q4_K_M   8.6            comfortable  comfortable
 gemma3:27b                                                                         local   27.4       Q4_K_M   ~19.3          will-thrash  tight      
 llama3.2:3b                                                                        local   3.2        Q4_K_M   ~2.3           comfortable  comfortable
+hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:Q4_K_M     local   11.9       Q4_K_M?  ~8.4           comfortable  comfortable
+hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:latest     local   11.9       Q4_K_M?  ~8.4           comfortable  comfortable
 mxbai-embed-large                                                                  remote  0.3        Q4_K_M?  ~0.2           comfortable  comfortable
 mistrallite                                                                        remote  7.0        Q4_K_M?  ~4.9           comfortable  comfortable
 oamazonasgabriel/qwen2.5-coder.1.5b-mlx                                            remote  1.5        Q4_K_M?  ~1.1           comfortable  comfortable

@@ -49,6 +49,30 @@
       "currentVerdict": "comfortable"
     },
     {
+      "name": "hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:Q4_K_M",
+      "source": "local",
+      "url": null,
+      "parameterSizeB": 11.9,
+      "quantizationLevel": "Q4_K_M",
+      "footprintGb": 8.3671875,
+      "estimateSource": "estimated",
+      "quantKnown": false,
+      "baselineVerdict": "comfortable",
+      "currentVerdict": "comfortable"
+    },
+    {
+      "name": "hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:latest",
+      "source": "local",
+      "url": null,
+      "parameterSizeB": 11.9,
+      "quantizationLevel": "Q4_K_M",
+      "footprintGb": 8.3671875,
+      "estimateSource": "estimated",
+      "quantKnown": false,
+      "baselineVerdict": "comfortable",
+      "currentVerdict": "comfortable"
+    },
+    {
       "name": "mxbai-embed-large",
       "source": "remote",
       "url": "https://ollama.com/library/mxbai-embed-large",

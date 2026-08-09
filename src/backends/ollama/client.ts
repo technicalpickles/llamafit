@@ -66,6 +66,19 @@ export function isCloudModel(model: OllamaTagsModel): boolean {
   return typeof model.remote_host === 'string' && model.remote_host.length > 0;
 }
 
+/** Ollama signals "no quantization reported" two ways: an empty string and the
+ * literal string 'unknown'. Both must collapse to null so the row renders `?`
+ * and the estimator uses its fallback — treating 'unknown' as a quant *name*
+ * raises an unknown-quant gap whose agent prompt asks for a bytes-per-param
+ * value for the concept "unknown", which has none. Add to this set if another
+ * backend invents its own sentinel ('none', 'N/A'). */
+const NOT_REPORTED_QUANTS: ReadonlySet<string> = new Set(['', 'unknown']);
+
+export function normalizeQuant(raw: string | undefined | null): string | null {
+  const trimmed = (raw ?? '').trim();
+  return NOT_REPORTED_QUANTS.has(trimmed.toLowerCase()) ? null : trimmed;
+}
+
 /** Official models live at ollama.com/library/<name>; community uploads are namespaced
  * as ollama.com/<user>/<name>, distinguishable by the presence of a `/` in the name. */
 export function modelPageUrl(name: string): string {

@@ -15,6 +15,7 @@ import {
   unloadModel,
   isCloudModel,
   parseParameterSize,
+  normalizeQuant,
   type OllamaTagsResponse,
   type OllamaPsResponse,
 } from './client.js';
@@ -39,7 +40,7 @@ export function mapTagsToLocalModels(tags: OllamaTagsResponse): LocalModels {
       source: 'local',
       url: null,
       parameterSizeB: parseParameterSize(model.details.parameter_size),
-      quantizationLevel: model.details.quantization_level || null,
+      quantizationLevel: normalizeQuant(model.details.quantization_level),
       diskSizeBytes: model.size,
     });
   }
@@ -51,7 +52,7 @@ export function mapPsToLoaded(ps: OllamaPsResponse): LoadedModel[] {
   return ps.models.map((model) => ({
     name: model.name,
     sizeVramGb: model.size_vram / 1e9,
-    quantizationLevel: model.details.quantization_level || null,
+    quantizationLevel: normalizeQuant(model.details.quantization_level),
   }));
 }
 

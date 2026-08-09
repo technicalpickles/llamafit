@@ -6,6 +6,7 @@ import {
   modelPageUrl,
   fetchTags,
   createPullModel,
+  normalizeQuant,
   type OllamaTagsResponse,
 } from '../src/backends/ollama/client.js';
 
@@ -32,6 +33,33 @@ describe('parseParameterSize', () => {
 
   it('returns null for an empty string', () => {
     expect(parseParameterSize('')).toBeNull();
+  });
+});
+
+describe('normalizeQuant', () => {
+  it('treats the literal string "unknown" as not-reported', () => {
+    expect(normalizeQuant('unknown')).toBeNull();
+  });
+
+  it('treats empty and whitespace-only as not-reported', () => {
+    expect(normalizeQuant('')).toBeNull();
+    expect(normalizeQuant('   ')).toBeNull();
+    expect(normalizeQuant(undefined)).toBeNull();
+    expect(normalizeQuant(null)).toBeNull();
+  });
+
+  it('is case-insensitive about the sentinel', () => {
+    expect(normalizeQuant('Unknown')).toBeNull();
+    expect(normalizeQuant('UNKNOWN')).toBeNull();
+  });
+
+  it('passes a real quantization through untouched, preserving case', () => {
+    expect(normalizeQuant('Q4_K_M')).toBe('Q4_K_M');
+    expect(normalizeQuant('bf16')).toBe('bf16');
+  });
+
+  it('trims surrounding whitespace off a real value', () => {
+    expect(normalizeQuant('  Q4_K_M  ')).toBe('Q4_K_M');
   });
 });
 
@@ -66,9 +94,9 @@ describe('isCloudModel', () => {
     expect(isCloudModel(localModel!)).toBe(false);
   });
 
-  it('counts exactly 4 local (non-cloud) models in the fixture', () => {
+  it('counts exactly 6 local (non-cloud) models in the fixture', () => {
     const localCount = tags.models.filter((m) => !isCloudModel(m)).length;
-    expect(localCount).toBe(4);
+    expect(localCount).toBe(6);
   });
 });
 

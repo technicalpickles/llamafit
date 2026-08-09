@@ -88,6 +88,50 @@
             ]
         },
         {
+            "name": "hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:Q4_K_M",
+            "model": "hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:Q4_K_M",
+            "modified_at": "2026-08-08T21:24:53.35962927-04:00",
+            "size": 7381382430,
+            "digest": "036489398bf6af6874783c754592a90f12a036b20cbbf47a867a3ac938868aff",
+            "details": {
+                "parent_model": "",
+                "format": "gguf",
+                "family": "gemma4",
+                "families": [
+                    "gemma4"
+                ],
+                "parameter_size": "11.9B",
+                "quantization_level": "unknown",
+                "context_length": 262144,
+                "embedding_length": 3840
+            },
+            "capabilities": [
+                "completion"
+            ]
+        },
+        {
+            "name": "hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:latest",
+            "model": "hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:latest",
+            "modified_at": "2026-08-08T21:03:56.149412934-04:00",
+            "size": 7381382430,
+            "digest": "036489398bf6af6874783c754592a90f12a036b20cbbf47a867a3ac938868aff",
+            "details": {
+                "parent_model": "",
+                "format": "gguf",
+                "family": "gemma4",
+                "families": [
+                    "gemma4"
+                ],
+                "parameter_size": "11.9B",
+                "quantization_level": "unknown",
+                "context_length": 262144,
+                "embedding_length": 3840
+            },
+            "capabilities": [
+                "completion"
+            ]
+        },
+        {
             "name": "glm-5.2:cloud",
             "model": "glm-5.2:cloud",
             "remote_model": "glm-5.2",

@@ -44,7 +44,7 @@ describe('runCheck', () => {
 
     expect(result.rows.every((r) => r.source !== 'local' || !r.name.includes(':cloud'))).toBe(true);
     expect(result.cloudModels).toContain('glm-5.2:cloud');
-    expect(result.rows.filter((r) => r.source === 'local').length).toBe(4);
+    expect(result.rows.filter((r) => r.source === 'local').length).toBe(6);
   });
 
   it('computes baseline headroom as total minus the fixed macOS reserve', async () => {
@@ -79,7 +79,7 @@ describe('runCheck', () => {
       })
     );
     expect(result.scrapeWarning).toMatch(/network unreachable/);
-    expect(result.rows.filter((r) => r.source === 'local').length).toBe(4);
+    expect(result.rows.filter((r) => r.source === 'local').length).toBe(6);
   });
 
   it('includes remote candidates with a parsed size, using the unknown-quant fallback', async () => {
@@ -210,6 +210,42 @@ describe('runCheck', () => {
     expect(unknownQuant.length).toBe(1);
     expect(unknownQuant[0].summary).toBe('unknown quantization "UD-Q4_K_XL"');
     expect(unknownQuant[0].evidence).toMatchObject({ quantizationLevel: 'UD-Q4_K_XL' });
+  });
+
+  it('records no unknown-quant gap for a model whose quant is the string "unknown"', async () => {
+    const gaps = new GapCollector();
+    await runCheck('mlx', {
+      backend: fixtureBackend(),
+      probe: fixtureProbe(fakeSystem),
+      estimator: formulaEstimator,
+      gaps,
+    });
+    expect(gaps.list().filter((g) => g.kind === 'unknown-quant')).toEqual([]);
+  });
+
+  it('still records unknown-quant for a genuinely unrecognized quantization', async () => {
+    const gaps = new GapCollector();
+    await runCheck('mlx', {
+      backend: fixtureBackend({
+        localModels: async () => ({
+          models: [
+            {
+              name: 'weird:latest',
+              source: 'local',
+              url: null,
+              parameterSizeB: 7,
+              quantizationLevel: 'Q3_K_XL_TURBO',
+              diskSizeBytes: null,
+            },
+          ],
+          skipped: [],
+        }),
+      }),
+      probe: fixtureProbe(fakeSystem),
+      estimator: formulaEstimator,
+      gaps,
+    });
+    expect(gaps.list().map((g) => g.kind)).toContain('unknown-quant');
   });
 
   it('records a scrape-failed gap and still returns local rows', async () => {
