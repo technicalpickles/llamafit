@@ -526,7 +526,9 @@ wins over the tag."
 
 Seven local rows are six models: `…-GGUF:Q4_K_M` and `…-GGUF:latest` share digest `036489398bf6…`. Collapse them.
 
-**Ordering matters:** this must run *after* quant resolution, because the representative-tag rule depends on which tag yielded a quant. Collapsing first on the shortest name would pick `:latest` and discard the only tag naming a quantization.
+**Ordering matters:** this must run *after* quant resolution, because the representative-tag rule prefers whichever tag yielded a quant. Reverse the order and every tag's quant is still `null` at collapse time, so that preference cannot fire and the shortest-name fallback decides alone.
+
+**Corrected during execution — the original justification here was wrong.** It claimed the shortest-name fallback "would pick `:latest`" over `:Q4_K_M`. Both tags are exactly 6 characters, so shortest-name does not discriminate between them; the tie resolves by insertion order, which in `api-tags.json` already favours `:Q4_K_M`. Replaying the real fixture through both orders yields identical output, so the real fixture **cannot** pin this constraint. A test that discriminates needs the quant-bearing tag to be both longer and later than its sibling — see the synthetic-input test in Step 7.
 
 **Files:**
 - Modify: `src/types.ts`
@@ -637,11 +639,15 @@ Add to `src/backends/ollama/index.ts`:
 
 ```ts
 /** Two tags pointing at the same digest are the same weights, so they are one
- * row. Representative choice is deliberate and order-dependent: prefer a tag
- * whose quantization resolved (which, after quantFromTag, means the tag itself
- * named a quant), else the shortest name. Picking "shortest" unconditionally
- * would choose `:latest` over `:Q4_K_M` and throw away the only tag carrying
- * that information — hence this runs after quant resolution, not before. */
+ * row. Representative choice: prefer a tag whose quantization resolved (which,
+ * after quantFromTag, means the tag itself named a quant), else the shortest
+ * name, ties going to first appearance.
+ *
+ * Call this AFTER quant resolution. Before it, every quant is still null, so
+ * the preference can't fire and the survivor is decided by name length and
+ * insertion order — neither of which tracks which tag carries usable
+ * information. Equal-length siblings like `:latest` and `:Q4_K_M` make that
+ * especially arbitrary. */
 export function collapseByDigest(models: ModelInfo[]): ModelInfo[] {
   const groups = new Map<string, ModelInfo[]>();
   const out: ModelInfo[] = [];
@@ -708,9 +714,9 @@ git add src/types.ts src/backends/ollama/index.ts test/ollama-backend.test.ts te
 git commit -m "feat: collapse local models sharing a digest
 
 Two tags on one digest are the same weights. Representative tag prefers one
-whose quantization resolved, else the shortest name -- picking shortest
-unconditionally would choose :latest over :Q4_K_M and discard the only tag
-naming a quant, so this runs after quant resolution."
+whose quantization resolved, else the shortest name. Runs after quant
+resolution: before it, every quant is null, so the preference can't fire and
+the survivor is picked by name length and insertion order instead."
 ```
 
 ---

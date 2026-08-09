@@ -206,12 +206,26 @@ tags listed inline. Requires carrying `digest` through `ModelInfo`; entries
 without one fall back to one-row-per-name.
 
 Display-name choice interacts with `quant-from-tag` and the two must not
-fight: the naive "shortest tag" rule would pick `:latest` over `:Q4_K_M`,
-throwing away the only tag that names a quantization. So: **prefer a tag whose
-suffix resolves to a known quant; fall back to the shortest.** Ordering the
-two changes the other way — collapsing first on the shortest name, then
-reading the quant off it — silently loses information, which is worth an
-explicit test rather than a comment.
+fight. **Prefer a tag whose suffix resolves to a known quant; fall back to the
+shortest name.** Collapse must therefore run *after* quant resolution — reverse
+the order and every tag's quant is still `null` at collapse time, so the
+preference cannot fire and the fallback decides alone.
+
+**Corrected during implementation.** An earlier draft of this section justified
+that ordering by claiming the shortest-name fallback "would pick `:latest` over
+`:Q4_K_M`". That is false: both tags are exactly 6 characters, so shortest-name
+does not discriminate between them, and the tie resolves by insertion order —
+which in the real fixture happens to favour `:Q4_K_M` anyway. Replaying the
+fixture through both orders produces identical output.
+
+The ordering requirement is still real; the mechanism is just different from
+what was written. Without the quant-bearing preference, the survivor is chosen
+by name length and then by fixture ordering — neither of which has anything to
+do with which tag carries usable information. The dependency only becomes
+observable when the quant-bearing tag is both longer and later than its sibling,
+so **that** is the shape the test must take; the real fixture cannot express it.
+The lesson generalises: a rationale asserting a relationship between two
+concrete values needs the values checked, not assumed.
 
 ### `drop-non-chat`
 
