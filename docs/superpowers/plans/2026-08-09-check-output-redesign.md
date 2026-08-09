@@ -288,15 +288,78 @@ Both are now in the tags fixture as real captured data."
 Ollama pulls HF repos as `hf.co/<owner>/<repo>:<quant>`, so the tag names the quantization the manifest failed to report. Recovering it turns `?` into a real quant for exactly the models Task 1 just made honest.
 
 **Files:**
+- Create: `src/model-names.ts`
 - Modify: `src/backends/ollama/client.ts`
 - Modify: `src/backends/ollama/index.ts` (`mapTagsToLocalModels`)
-- Test: `test/ollama-client.test.ts`
+- Test: `test/model-names.test.ts` (new), `test/ollama-client.test.ts`
 
 **Interfaces:**
 - Consumes: `normalizeQuant` (Task 1); `loadQuantTable`, `lookupQuant`, `QuantTable` from `src/data.js`
-- Produces: `quantFromTag(name: string, table: QuantTable): string | null` exported from `src/backends/ollama/client.ts`
+- Produces:
+  - `splitModelTag(name: string): { base: string; tag: string | null }` from `src/model-names.ts` — **Task 6 consumes this too**
+  - `quantFromTag(name: string, table: QuantTable): string | null` from `src/backends/ollama/client.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing test for the shared tag splitter**
+
+Both this task (read the tag) and Task 6 (strip the tag) need the same rule about what counts as a tag, so it lives in one place. Create `test/model-names.test.ts`:
+
+```ts
+import { describe, it, expect } from 'vitest';
+import { splitModelTag } from '../src/model-names.js';
+
+describe('splitModelTag', () => {
+  it('splits a normal tagged name', () => {
+    expect(splitModelTag('gemma3:12b')).toEqual({ base: 'gemma3', tag: '12b' });
+    expect(splitModelTag('hf.co/o/r:Q4_K_M')).toEqual({ base: 'hf.co/o/r', tag: 'Q4_K_M' });
+  });
+
+  it('reports no tag when there is no colon', () => {
+    expect(splitModelTag('mistrallite')).toEqual({ base: 'mistrallite', tag: null });
+  });
+
+  it('does not treat a colon followed by a path as a tag', () => {
+    // A slash after the last colon means we're looking at a path segment.
+    expect(splitModelTag('hf.co/owner:weird/repo')).toEqual({
+      base: 'hf.co/owner:weird/repo',
+      tag: null,
+    });
+  });
+
+  it('reports no tag for a trailing colon', () => {
+    expect(splitModelTag('gemma3:')).toEqual({ base: 'gemma3:', tag: null });
+  });
+});
+```
+
+- [ ] **Step 2: Run it and confirm it fails for the right reason**
+
+Run: `npx vitest run test/model-names.test.ts`
+Expected: FAIL — cannot resolve `../src/model-names.js`.
+
+- [ ] **Step 3: Create `src/model-names.ts`**
+
+```ts
+/** Model-name parsing shared across backends. Both Ollama and llama-server name
+ * models `<base>:<tag>`, and two callers need the same answer to "is that colon
+ * a tag separator?" — one to read the tag (quantFromTag), one to strip it
+ * (check.ts's untagged, for local/remote dedup). One rule, one place. */
+
+export function splitModelTag(name: string): { base: string; tag: string | null } {
+  const colon = name.lastIndexOf(':');
+  if (colon === -1) return { base: name, tag: null };
+  const tag = name.slice(colon + 1);
+  // Empty means a trailing colon; a slash means we're looking at a path segment.
+  if (tag.length === 0 || tag.includes('/')) return { base: name, tag: null };
+  return { base: name.slice(0, colon), tag };
+}
+```
+
+- [ ] **Step 4: Run it and confirm it passes**
+
+Run: `npx vitest run test/model-names.test.ts`
+Expected: PASS
+
+- [ ] **Step 5: Write the failing test for `quantFromTag`**
 
 Add to `test/ollama-client.test.ts`:
 
@@ -328,7 +391,8 @@ describe('quantFromTag', () => {
   });
 
   it('ignores a colon that belongs to a namespace rather than a tag', () => {
-    // Nothing after the last colon may contain a slash — that is a path, not a tag.
+    // Delegated to splitModelTag; asserted here so the behaviour is pinned at
+    // this layer too, not just in the helper's own tests.
     expect(quantFromTag('hf.co/owner:weird/repo', table)).toBeNull();
   });
 });
@@ -336,12 +400,12 @@ describe('quantFromTag', () => {
 
 `bf16` → `F16` because `data/quants.json` lists `BF16` as an alias of the `F16` entry.
 
-- [ ] **Step 2: Run it and confirm it fails for the right reason**
+- [ ] **Step 6: Run it and confirm it fails for the right reason**
 
 Run: `npx vitest run test/ollama-client.test.ts -t quantFromTag`
 Expected: FAIL — no such export.
 
-- [ ] **Step 3: Implement `quantFromTag`**
+- [ ] **Step 7: Implement `quantFromTag`**
 
 Add to `src/backends/ollama/client.ts`:
 
@@ -351,11 +415,8 @@ Add to `src/backends/ollama/client.ts`:
  * matching a known entry or alias, which is what makes it safe to try on every
  * name: `gemma3:12b` and `…-mlx:4bit` simply don't match and fall through. */
 export function quantFromTag(name: string, table: QuantTable): string | null {
-  const colon = name.lastIndexOf(':');
-  if (colon === -1) return null;
-  const tag = name.slice(colon + 1);
-  // A slash after the last colon means we're looking at a path segment, not a tag.
-  if (tag.length === 0 || tag.includes('/')) return null;
+  const { tag } = splitModelTag(name);
+  if (tag === null) return null;
   const { id, known } = lookupQuant(table, tag);
   return known ? id : null;
 }
@@ -365,14 +426,15 @@ Add the imports at the top of `client.ts`:
 
 ```ts
 import { lookupQuant, type QuantTable } from '../../data.js';
+import { splitModelTag } from '../../model-names.js';
 ```
 
-- [ ] **Step 4: Run it and confirm it passes**
+- [ ] **Step 8: Run it and confirm it passes**
 
 Run: `npx vitest run test/ollama-client.test.ts -t quantFromTag`
 Expected: PASS
 
-- [ ] **Step 5: Write the failing integration test**
+- [ ] **Step 9: Write the failing integration test**
 
 Add to `test/ollama-backend.test.ts`:
 
@@ -415,12 +477,12 @@ it('prefers a quantization the manifest did report over the tag', () => {
 
 Use whatever `loadJsonFixture` / `OllamaTagsResponse` imports the file already has.
 
-- [ ] **Step 6: Run it and confirm it fails**
+- [ ] **Step 10: Run it and confirm it fails**
 
 Run: `npx vitest run test/ollama-backend.test.ts -t "hf.co tag"`
 Expected: FAIL — `quantizationLevel` is `null`, expected `'Q4_K_M'`.
 
-- [ ] **Step 7: Wire it into the mapper**
+- [ ] **Step 11: Wire it into the mapper**
 
 In `src/backends/ollama/index.ts`, import `quantFromTag` from `./client.js` and `loadQuantTable` from `../../data.js`, then in `mapTagsToLocalModels`:
 
@@ -432,22 +494,23 @@ In `src/backends/ollama/index.ts`, import `quantFromTag` from `./client.js` and 
 
 `loadQuantTable()` memoizes internally, so calling it per row is free.
 
-- [ ] **Step 8: Run the tests**
+- [ ] **Step 12: Run the tests**
 
 Run: `npx vitest run test/ollama-backend.test.ts`
 Expected: PASS
 
 Run: `npm test` — the guardrail snapshots FAIL again (one row's QUANT changed `?` → `Q4_K_M`). Refresh: `npx vitest run test/output-guardrail.test.ts -u`, read the diff, confirm only that one cell changed.
 
-- [ ] **Step 9: Typecheck both configs**
+- [ ] **Step 13: Typecheck both configs**
 
 Run: `npm run typecheck && npm run build`
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 14: Commit**
 
 ```bash
-git add src/backends/ollama/client.ts src/backends/ollama/index.ts \
-        test/ollama-client.test.ts test/ollama-backend.test.ts test/fixtures/
+git add src/model-names.ts src/backends/ollama/client.ts src/backends/ollama/index.ts \
+        test/model-names.test.ts test/ollama-client.test.ts test/ollama-backend.test.ts \
+        test/fixtures/
 git commit -m "feat: recover quantization from hf.co pull tags
 
 Ollama pulls HF repos as hf.co/<owner>/<repo>:<quant>, so the tag names the
@@ -968,8 +1031,10 @@ Two filters are missing: a candidate already pulled locally is offered as a "pul
 - Test: `test/check.test.ts`
 
 **Interfaces:**
-- Consumes: `localRows` (existing, within `runCheck`)
-- Produces: `untagged(name: string): string` and `isNonChat(name: string): boolean`, both exported from `src/check.ts` for testing
+- Consumes: `localRows` (existing, within `runCheck`); `splitModelTag` from `src/model-names.js` (Task 2)
+- Produces: `untagged(name: string): string` and `isNonChat(name: string): boolean`, both exported from `src/check.ts`
+
+Add `import { splitModelTag } from './model-names.js';` to `src/check.ts`. for testing
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1068,12 +1133,10 @@ Expected: FAIL — no such export.
 Add near the top of `src/check.ts`:
 
 ```ts
-/** Ollama tags follow the last colon and never contain a slash, so anything
- * with a slash after the last colon is a path segment, not a tag. */
+/** Same tag rule as quantFromTag, via the same helper — one is asking what the
+ * tag says, the other is asking what the name is without it. */
 export function untagged(name: string): string {
-  const colon = name.lastIndexOf(':');
-  if (colon === -1) return name;
-  return name.slice(colon + 1).includes('/') ? name : name.slice(0, colon);
+  return splitModelTag(name).base;
 }
 
 /** Embedding and reranking models are not what "which model should I run"
@@ -1356,23 +1419,32 @@ In the `CheckRow` interface:
 
 Then add `fit: fitGroup(<baseline>, <current>)` to each of the four `CheckRow` object literals in `runCheck` (the measured-local branch, the null-params local branch, the estimated-local branch, and the remote branch), using that branch's own verdict values. For the null-params branch both are `'unknown'`, so `fit: 'unclassified'`.
 
-- [ ] **Step 5: Run it and confirm it passes**
+- [ ] **Step 5: Fix the hand-built row literals in the tests**
+
+`fit` is required, so every hand-built `CheckRow` literal stops typechecking — and `npm test` alone will not tell you, because vitest transpiles without typechecking. `test/format.test.ts` has 9 such literals; `test/check.test.ts` has 1.
+
+Run `npm run typecheck` to get the exact list, then add the correct `fit` value to each. Derive it from that literal's own `baselineVerdict`/`currentVerdict` per the table in Step 1 — do **not** blanket-add `fit: 'comfortable'`. `test/format.test.ts`'s `sampleResult` is `comfortable`/`will-thrash`, so its `fit` is `'pressured'`, and Task 11 has a test asserting exactly that. Getting this wrong here makes that test fail for a confusing reason two tasks later.
+
+`test/formula-estimator.test.ts` builds `Estimate` objects, not `CheckRow`s, so it needs no change.
+
+- [ ] **Step 6: Run it and confirm it passes**
 
 Run: `npx vitest run test/check.test.ts`
 Expected: PASS
 
-- [ ] **Step 6: Full suite and snapshot refresh**
+- [ ] **Step 7: Full suite and snapshot refresh**
 
 Run: `npm test` → `guardrail-check.json` FAILs (new field on every row); the table snapshot should be unchanged. Refresh with `-u`.
 
-- [ ] **Step 7: Typecheck both configs**
+- [ ] **Step 8: Typecheck both configs**
 
 Run: `npm run typecheck && npm run build`
+Expected: both clean. If `typecheck` still reports missing `fit`, Step 5 is incomplete.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add src/check.ts test/check.test.ts test/fixtures/guardrail-check.json
+git add src/check.ts test/check.test.ts test/format.test.ts test/fixtures/guardrail-check.json
 git commit -m "feat: derive a fit group from the baseline/current verdict pair
 
 The two verdict columns agree on 28 of 33 rows, spending two columns to say
@@ -1515,23 +1587,28 @@ Then in the returned object, with `rows` already assembled into a local const:
 
 Add `recommendations: Recommendations;` to the `CheckResult` interface.
 
-- [ ] **Step 4: Run it and confirm it passes**
+- [ ] **Step 4: Fix the hand-built `CheckResult` literals in the tests**
+
+Same trap as Task 8 Step 5, for the same reason: `recommendations` is required, and vitest won't tell you. Run `npm run typecheck` for the list and add a `recommendations` object to each hand-built `CheckResult` — `{ runNow: null, runNowBigger: null, worthPulling: null }` is the right default for literals whose recommendations aren't what the test is about. Task 11's tests override it explicitly where they need to.
+
+- [ ] **Step 5: Run it and confirm it passes**
 
 Run: `npx vitest run test/check.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Full suite and snapshot refresh**
+- [ ] **Step 6: Full suite and snapshot refresh**
 
 Run: `npm test` → `guardrail-check.json` FAILs (new object). Refresh with `-u`.
 
-- [ ] **Step 6: Typecheck both configs**
+- [ ] **Step 7: Typecheck both configs**
 
 Run: `npm run typecheck && npm run build`
+Expected: both clean.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add src/check.ts test/check.test.ts test/fixtures/guardrail-check.json
+git add src/check.ts test/check.test.ts test/format.test.ts test/fixtures/guardrail-check.json
 git commit -m "feat: compute run-now and worth-pulling recommendations explicitly
 
 format.ts picked its suggestion as the first row with a known verdict, i.e.
@@ -1556,7 +1633,7 @@ sort position cannot express."
 **Interfaces:**
 - Produces, from `src/format/table.ts`:
   - `padCell(display: string, plain: string, width: number): string`
-  - `columnWidths(header: string[], plainRows: string[][]): number[]`
+  - `columnWidths(plainRows: string[][]): number[]` — takes *all* rows including any header row, rather than header-plus-rows. The old inline code special-cased the header only because it happened to have one; Task 11's sections have no header row, and a caller shouldn't have to synthesise a fake one to use this.
   - `formatRow(displayCells: string[], plainCells: string[], widths: number[]): string`
 - `src/format.ts` re-exports everything previously exported from it, so no import site outside `src/format/` changes.
 
@@ -1569,12 +1646,18 @@ import { describe, it, expect } from 'vitest';
 import { padCell, columnWidths, formatRow } from '../src/format/table.js';
 
 describe('columnWidths', () => {
-  it('takes the widest of header and cells per column', () => {
-    expect(columnWidths(['MODEL', 'Q'], [['gemma3:12b', 'Q4_K_M'], ['a', 'b']])).toEqual([10, 6]);
+  it('takes the widest cell per column', () => {
+    expect(
+      columnWidths([['MODEL', 'Q'], ['gemma3:12b', 'Q4_K_M'], ['a', 'b']])
+    ).toEqual([10, 6]);
   });
 
-  it('falls back to header width when there are no rows', () => {
-    expect(columnWidths(['MODEL', 'QUANT'], [])).toEqual([5, 5]);
+  it('handles a single row', () => {
+    expect(columnWidths([['MODEL', 'QUANT']])).toEqual([5, 5]);
+  });
+
+  it('returns no widths for no rows', () => {
+    expect(columnWidths([])).toEqual([]);
   });
 });
 
@@ -1615,8 +1698,12 @@ Expected: FAIL — cannot resolve `../src/format/table.js`.
  * width — ANSI escape codes have no display width, so padding against a
  * colorized cell's own `.length` pads too far and breaks alignment. */
 
-export function columnWidths(header: string[], plainRows: string[][]): number[] {
-  return header.map((h, i) => Math.max(h.length, ...plainRows.map((row) => row[i].length)));
+export function columnWidths(plainRows: string[][]): number[] {
+  if (plainRows.length === 0) return [];
+  const columns = Math.max(...plainRows.map((row) => row.length));
+  return Array.from({ length: columns }, (_, i) =>
+    Math.max(...plainRows.map((row) => (row[i] ?? '').length))
+  );
 }
 
 export function padCell(display: string, plain: string, width: number): string {
@@ -1632,7 +1719,7 @@ export function formatRow(
 }
 ```
 
-`Math.max(h.length, ...[])` is `h.length`, so the no-rows case needs no special handling.
+The `plainRows.length === 0` guard matters: `Math.max()` with no arguments is `-Infinity`, so an empty table would otherwise produce garbage widths rather than no widths.
 
 - [ ] **Step 4: Run it and confirm it passes**
 
@@ -1649,7 +1736,7 @@ Create `src/format/check.ts` containing `formatCheckTable` and `formatCheckJson`
 import { columnWidths, formatRow } from './table.js';
 ```
 
-with the two call sites becoming `columnWidths(header, plainRows)` and `formatRow(cells, plain, widths)`. Re-export `FormatOptions` from `./bench.js` so both modules share one definition.
+with the two call sites becoming `columnWidths([header, ...plainRows])` and `formatRow(cells, plain, widths)` — including the header row in the input produces the same widths the old inline code computed, so this stays a behaviour-preserving move. Re-export `FormatOptions` from `./bench.js` so both modules share one definition.
 
 - [ ] **Step 6: Turn `src/format.ts` into a barrel**
 
@@ -1963,8 +2050,7 @@ function renderSection(
   const lines = [label(`${title} (${count}${suffix})`, o.color)];
 
   // Widths span the whole section so columns line up across group boundaries.
-  const table = shown.map((r) => cells(r, o.withDownloads));
-  const widths = columnWidths(table[0].map(() => ''), table);
+  const widths = columnWidths(shown.map((r) => cells(r, o.withDownloads)));
 
   for (const group of GROUP_ORDER) {
     const inGroup = shown.filter((r) => r.fit === group);
@@ -2115,8 +2201,6 @@ export function formatCheckTable(result: CheckResult, opts: FormatOptions = {}):
 ```
 
 Deleted along the way: the `Remote model links:` block, the `Cloud models` block, the two trailing headroom lines (now the header), and the old `MODEL/SOURCE/PARAMS(B)/QUANT/FOOTPRINT(GB)/BASELINE/CURRENT` header row.
-
-Note `columnWidths(table[0].map(() => ''), table)` passes empty header cells because these sections have no header row — widths come from the data alone. That is why `columnWidths` was written to take header and rows separately.
 
 - [ ] **Step 5: Run the tests**
 
@@ -2370,6 +2454,8 @@ Do **not** mark it done — the `modelPageUrl` portion is untouched.
 
 **Ordering constraints, all satisfied:** Task 3 (`digest-collapse`) after Task 2 (`quant-from-tag`), because the representative-tag rule reads the resolved quant. Task 6 (`remote-filter`) after Task 5 (`remote-rank`), since `recommendations` in Task 9 relies on remote rows arriving pre-sorted. Task 10 (`format-split`) before Task 11 (`render-sections`), so the rewrite happens in a clean module and the split itself is provably behaviour-preserving. Tasks 8–9 before 11, which consumes both.
 
-**Type consistency check:** `FitGroup` and `fitGroup()` are defined in Task 8 and consumed in 9 and 11. `Recommendations` (with all three fields `runNow` / `runNowBigger` / `worthPulling`) is defined in Task 9 and consumed in 11 and 12. `columnWidths` / `padCell` / `formatRow` are defined in Task 10 and consumed in 11. `normalizeQuant` (Task 1) and `quantFromTag` (Task 2) are consumed in Task 3. `untagged` is defined in Task 6 and is deliberately a second, independent implementation from `quantFromTag`'s inline tag parsing — they answer different questions (strip a tag vs. read a tag) and share only the "slash after the last colon means it is not a tag" rule, which is asserted in both test suites.
+**Type consistency check:** `FitGroup` and `fitGroup()` are defined in Task 8 and consumed in 9 and 11. `Recommendations` (with all three fields `runNow` / `runNowBigger` / `worthPulling`) is defined in Task 9 and consumed in 11 and 12. `columnWidths` / `padCell` / `formatRow` are defined in Task 10 and consumed in 11. `normalizeQuant` (Task 1) and `quantFromTag` (Task 2) are consumed in Task 3. `splitModelTag` is defined in Task 2 and consumed by both `quantFromTag` (Task 2) and `untagged` (Task 6) — one tag rule, one place, rather than two near-identical parsers.
+
+**Required-field trap, twice.** Task 8 adds `fit` to `CheckRow` and Task 9 adds `recommendations` to `CheckResult`, both required. Vitest transpiles without typechecking, so `npm test` stays green while `npm run typecheck` fails — which is exactly why the Global Constraints insist on running both. Each task has an explicit step to fix the hand-built literals (9 in `test/format.test.ts`, 1 in `test/check.test.ts`), and Task 8's says to derive each `fit` from that literal's own verdicts rather than blanket-filling `'comfortable'`: `sampleResult` is `comfortable`/`will-thrash` → `'pressured'`, which a Task 11 test asserts.
 
 **Snapshot churn is intentional and sequenced.** Tasks 1–9 each refresh `guardrail-*` and each step says what the diff must show, so a wrong change cannot hide behind a blanket `-u`. Task 10 is the exception and must produce **zero** snapshot change — that is what proves the split was a pure refactor.
