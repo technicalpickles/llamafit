@@ -23,7 +23,7 @@ const sampleResult: CheckResult = {
       fit: 'pressured',
     },
   ],
-  recommendations: { runNow: 'gemma3:12b', runNowBigger: null, worthPulling: null },
+  recommendations: { runNow: 'gemma3:12b', runNowFit: 'pressured', runNowBigger: null, worthPulling: null },
   cloudModels: ['glm-5.2:cloud'],
   system: {
     totalGb: 24,
@@ -95,7 +95,7 @@ describe('formatCheckTable', () => {
     const row = table.split('\n').find((l) => l.includes('qwen3-30b'))!;
     // FOOTPRINT and QUANT both fall back to a bare "?" (there's no separate
     // PARAMS(B) column in the section rendering).
-    expect(row.split(/\s{2,}/).filter((cell) => cell === '?')).toHaveLength(2);
+    expect(row.trim().split(/\s+/).filter((cell) => cell === '?')).toHaveLength(2);
     expect(table).toContain("backend couldn't report this model's size");
   });
 
@@ -135,7 +135,7 @@ describe('bench hint', () => {
     const table = formatCheckTable({
       ...sampleResult,
       rows: [],
-      recommendations: { runNow: null, runNowBigger: null, worthPulling: null },
+      recommendations: { runNow: null, runNowFit: null, runNowBigger: null, worthPulling: null },
     });
     expect(table).not.toContain('llamafit bench');
   });
@@ -229,6 +229,52 @@ function stripAnsi(text: string): string {
   return text.replace(/\x1b\[[0-9;]*m/g, '');
 }
 
+describe('ragged-right row layout (no column padding)', () => {
+  it('renders a row as name then metrics separated by single spaces, with no trailing padding', () => {
+    const out = formatCheckTable(
+      { ...sampleResult, rows: [{ ...sampleResult.rows[0], name: 'gemma3:12b', footprintGb: 8.58 }] },
+      { color: false }
+    );
+    const row = out.split('\n').find((l) => l.startsWith('    gemma3:12b'))!;
+    expect(row).toBe('    gemma3:12b ~8.6G Q4_K_M');
+  });
+
+  it('never lets one long name pad the metrics of shorter rows onto what reads as the next row', () => {
+    // A real HF repo name that inflated the whole PULLED section's name
+    // column to ~107 characters under the old padded layout, making the
+    // metric cells of every other row wrap at 80 columns and read as
+    // belonging to the wrong model. Ragged-right means each row's own
+    // metrics sit right after its own name, however long the longest name in
+    // the section is.
+    const longName =
+      'cyborgxx101/gemma-4-12b-opus-finetuned-mlx-agentic-fable5-composer2-5-v2-3-5x-tau2-GGUF';
+    const out = formatCheckTable(
+      {
+        ...sampleResult,
+        rows: [
+          { ...sampleResult.rows[0], name: longName, footprintGb: 8.4 },
+          { ...sampleResult.rows[0], name: 'gemma3:12b', footprintGb: 8.58 },
+        ],
+      },
+      { color: false }
+    );
+    const shortRow = out.split('\n').find((l) => l.trim().startsWith('gemma3:12b'))!;
+    expect(shortRow).toBe('    gemma3:12b ~8.6G Q4_K_M');
+  });
+
+  it('omits the downloads cell entirely (no dangling separator) when a remote row has no signals', () => {
+    const out = formatCheckTable(
+      {
+        ...sampleResult,
+        rows: [{ ...sampleResult.rows[0], source: 'remote', name: 'hf.co/o/r', footprintGb: 3 }],
+      },
+      { color: false }
+    );
+    const row = out.split('\n').find((l) => l.includes('hf.co/o/r'))!;
+    expect(row).toBe('    hf.co/o/r ~3.0G Q4_K_M');
+  });
+});
+
 describe('formatCheckTable sections', () => {
   it('leads with a one-line header carrying both headroom figures', () => {
     const out = formatCheckTable(sampleResult, { color: false });
@@ -273,10 +319,10 @@ describe('formatCheckTable sections', () => {
 
   it('derives the overflow range from the hidden rows only, not the whole section', () => {
     // The largest row (10G) is within the cap and must not leak into the "+N
-    // more" range — the hidden rows are all much smaller (1G), so a range
+    // more" range — the hidden rows are all much smaller (1-2G), so a range
     // computed over every row instead of just the hidden ones would wrongly
     // show 1.0G–10.0G here.
-    const rows = [10, 9, 8, 7, 6, 1].map((size, i) => ({
+    const rows = [10, 9, 8, 7, 6, 2, 1].map((size, i) => ({
       ...sampleResult.rows[0],
       name: `local-${i}`,
       footprintGb: size,
@@ -286,8 +332,57 @@ describe('formatCheckTable sections', () => {
     }));
     const out = formatCheckTable({ ...sampleResult, rows }, { color: false });
     const moreLine = out.split('\n').find((l) => l.includes('more'))!;
-    expect(moreLine).toContain('1.0G–1.0G');
+    expect(moreLine).toContain('1.0G–2.0G');
     expect(moreLine).not.toContain('10.0G');
+  });
+
+  it('collapses a degenerate range to a single size when every hidden row is the same size', () => {
+    const rows = [8, 7, 6, 5, 4, 3, 3].map((size, i) => ({
+      ...sampleResult.rows[0],
+      name: `local-${i}`,
+      footprintGb: size,
+      fit: 'comfortable' as const,
+      baselineVerdict: 'comfortable' as const,
+      currentVerdict: 'comfortable' as const,
+    }));
+    const out = formatCheckTable({ ...sampleResult, rows }, { color: false });
+    const moreLine = out.split('\n').find((l) => l.includes('more'))!;
+    expect(moreLine).toContain('+2 more, 3.0G ');
+    expect(moreLine).not.toContain('–');
+  });
+
+  it('says so when a hidden row has no known footprint, instead of implying the range covers it', () => {
+    const known = [8, 7, 6, 5, 4].map((size, i) => ({
+      ...sampleResult.rows[0],
+      name: `local-${i}`,
+      footprintGb: size,
+      fit: 'comfortable' as const,
+      baselineVerdict: 'comfortable' as const,
+      currentVerdict: 'comfortable' as const,
+    }));
+    const unknownFootprint = {
+      ...sampleResult.rows[0],
+      name: 'local-unknown',
+      footprintGb: 3,
+      fit: 'comfortable' as const,
+      baselineVerdict: 'comfortable' as const,
+      currentVerdict: 'comfortable' as const,
+    };
+    const noFootprint = {
+      ...sampleResult.rows[0],
+      name: 'local-no-footprint',
+      footprintGb: null,
+      fit: 'comfortable' as const,
+      baselineVerdict: 'comfortable' as const,
+      currentVerdict: 'comfortable' as const,
+    };
+    const out = formatCheckTable(
+      { ...sampleResult, rows: [...known, unknownFootprint, noFootprint] },
+      { color: false }
+    );
+    const moreLine = out.split('\n').find((l) => l.includes('more'))!;
+    expect(moreLine).toContain('3.0G');
+    expect(moreLine).toContain('size unknown');
   });
 
   it('caps by total rows across groups, not per group', () => {
@@ -319,6 +414,51 @@ describe('formatCheckTable sections', () => {
     expect(out).toContain('+1 more');
   });
 
+  it('pins a row named by the recommendations into the shown set, even when the cap would hide it', () => {
+    // Reproduction: 5 comfortable rows fill the cap, and gemma3:27b
+    // (over-budget) is the row runNowBigger names in the "Run now" prose. The
+    // cap must not hide the very row the prose just told the reader about —
+    // and it must not resurface under the *comfortable* header (a reader
+    // would infer the hidden row was comfortable, when it isn't).
+    const comfortable = Array.from({ length: 5 }, (_, i) => ({
+      ...sampleResult.rows[0],
+      name: `comfortable-${i}`,
+      footprintGb: 8 - i,
+      fit: 'comfortable' as const,
+      baselineVerdict: 'comfortable' as const,
+      currentVerdict: 'comfortable' as const,
+    }));
+    const overBudget = {
+      ...sampleResult.rows[0],
+      name: 'gemma3:27b',
+      footprintGb: 19.3,
+      fit: 'over-budget' as const,
+      baselineVerdict: 'will-thrash' as const,
+      currentVerdict: 'comfortable' as const,
+    };
+    const out = formatCheckTable(
+      {
+        ...sampleResult,
+        rows: [...comfortable, overBudget],
+        recommendations: {
+          runNow: 'comfortable-0',
+          runNowFit: 'comfortable',
+          runNowBigger: 'gemma3:27b',
+          worthPulling: null,
+        },
+      },
+      { color: false }
+    );
+    // Pinning consumes the one row the cap would have hidden, so there's
+    // nothing left to report as withheld.
+    expect(out).not.toContain('more');
+    const lines = out.split('\n');
+    const overBudgetHeaderIdx = lines.findIndex((l) => l.includes('over the'));
+    const gemmaRowIdx = lines.findIndex((l) => /^ {4}gemma3:27b/.test(l));
+    expect(overBudgetHeaderIdx).toBeGreaterThan(-1);
+    expect(gemmaRowIdx).toBeGreaterThan(overBudgetHeaderIdx);
+  });
+
   it('emits no overflow line at exactly the cap', () => {
     const exactly = Array.from({ length: SECTION_CAP }, (_, i) => ({
       ...sampleResult.rows[0],
@@ -329,6 +469,25 @@ describe('formatCheckTable sections', () => {
     }));
     const out = formatCheckTable({ ...sampleResult, rows: exactly }, { color: false });
     expect(out).not.toContain('more');
+  });
+
+  it('never silently drops a row whose fit is not one of the known groups', () => {
+    // GROUP_ORDER is a hardcoded list of FitGroup values. orderRows used to
+    // flatMap over it, so a row carrying any other fit value (a bug, or a
+    // FitGroup union member added later without updating GROUP_ORDER)
+    // vanished: unrendered, uncounted in the header, absent from "+N more".
+    const mystery = {
+      ...sampleResult.rows[0],
+      name: 'mystery-row',
+      fit: 'mystery-fit' as unknown as CheckRow['fit'],
+    };
+    const out = formatCheckTable(
+      { ...sampleResult, rows: [sampleResult.rows[0], mystery] },
+      { color: false }
+    );
+    const header = out.split('\n').find((l) => l.startsWith('PULLED'))!;
+    expect(header).toContain('(2)');
+    expect(out).toContain('mystery-row');
   });
 
   it('uncaps the section named by expand', () => {
@@ -382,6 +541,25 @@ describe('formatCheckTable sections', () => {
     expect(out).toContain(':latest');
   });
 
+  it('renders a sibling with a different base name in full, not as a fabricated ":tag" on the representative row', () => {
+    // `ollama cp llama3.2:3b zzz-review-alias` produces two tags on the same
+    // digest with *different* base names — collapseByDigest's grouping
+    // assumption ("same digest implies same base") is false. Rendering the
+    // sibling as `(:latest)` here would fabricate a model
+    // "llama3.2:latest" that does not exist.
+    const out = formatCheckTable(
+      {
+        ...sampleResult,
+        rows: [
+          { ...sampleResult.rows[0], name: 'llama3.2:3b', alsoTagged: ['zzz-review-alias:latest'] },
+        ],
+      },
+      { color: false }
+    );
+    expect(out).toContain('zzz-review-alias:latest');
+    expect(out).not.toContain('(:latest)');
+  });
+
   it('ranks PULLABLE rows by downloads, not footprint size', () => {
     // Sized so bySizeDesc and byDownloadsDesc disagree completely — this must
     // fail if orderRows falls back to sorting PULLABLE by footprint.
@@ -410,7 +588,7 @@ describe('formatCheckTable sections', () => {
     const order = out
       .split('\n')
       .filter((l) => l.includes(' dl'))
-      .map((l) => l.trim().split(/\s{2,}/)[0]);
+      .map((l) => l.trim().split(/\s+/)[0]);
     expect(order).toEqual(['small-but-popular', 'mid-mid', 'big-but-unpopular']);
   });
 
@@ -420,6 +598,7 @@ describe('formatCheckTable sections', () => {
         ...sampleResult,
         recommendations: {
           runNow: 'gemma3:12b',
+          runNowFit: 'pressured',
           runNowBigger: 'gemma3:27b',
           worthPulling: 'ornith-ai/Ornith-1.0-9B-GGUF',
         },
@@ -436,7 +615,7 @@ describe('formatCheckTable sections', () => {
     const out = formatCheckTable(
       {
         ...sampleResult,
-        recommendations: { runNow: 'gemma3:12b', runNowBigger: null, worthPulling: null },
+        recommendations: { runNow: 'gemma3:12b', runNowFit: 'pressured', runNowBigger: null, worthPulling: null },
       },
       { color: false }
     );
@@ -449,7 +628,7 @@ describe('formatCheckTable sections', () => {
       {
         ...sampleResult,
         rows: [],
-        recommendations: { runNow: null, runNowBigger: null, worthPulling: null },
+        recommendations: { runNow: null, runNowFit: null, runNowBigger: null, worthPulling: null },
       },
       { color: false }
     );
@@ -459,10 +638,98 @@ describe('formatCheckTable sections', () => {
 
   it('still pins --backend in the bench hint', () => {
     const out = formatCheckTable(
-      { ...sampleResult, recommendations: { runNow: 'gemma3:12b', runNowBigger: null, worthPulling: null } },
+      { ...sampleResult, recommendations: { runNow: 'gemma3:12b', runNowFit: 'pressured', runNowBigger: null, worthPulling: null } },
       { color: false, backendId: 'ollama' }
     );
     expect(out).toContain('llamafit bench gemma3:12b --backend ollama');
+  });
+});
+
+describe('legend (only markers actually visible on screen)', () => {
+  // The legend's three conditions used to test result.rows — the full,
+  // uncapped set — while sections render at most SECTION_CAP rows. A marker
+  // whose only rows are all in the capped-out tail printed a legend line with
+  // nothing on screen to explain.
+  function comfortableRow(name: string, overrides: Partial<CheckRow> = {}): CheckRow {
+    return {
+      ...sampleResult.rows[0],
+      name,
+      fit: 'comfortable',
+      baselineVerdict: 'comfortable',
+      currentVerdict: 'comfortable',
+      quantKnown: true,
+      quantizationLevel: 'Q4_K_M',
+      footprintGb: 8,
+      ...overrides,
+    };
+  }
+
+  it('omits the unknown-quant legend line when the only unknown-quant row is capped out of view', () => {
+    const visible = Array.from({ length: SECTION_CAP }, (_, i) => comfortableRow(`local-${i}`));
+    const hidden = comfortableRow('local-hidden', { quantKnown: false, footprintGb: 1 });
+    const out = formatCheckTable({ ...sampleResult, rows: [...visible, hidden] }, { color: false });
+    expect(out).not.toContain('not reported by the backend; assumed');
+  });
+
+  it('keeps the unknown-quant legend line when an unknown-quant row is visible', () => {
+    const visible = Array.from({ length: SECTION_CAP - 1 }, (_, i) => comfortableRow(`local-${i}`));
+    const shownUnknownQuant = comfortableRow('local-unknown-quant', { quantKnown: false });
+    const out = formatCheckTable(
+      { ...sampleResult, rows: [...visible, shownUnknownQuant] },
+      { color: false }
+    );
+    expect(out).toContain('not reported by the backend; assumed');
+  });
+
+  it('omits the estimated-footprint legend line when the only estimated row is capped out of view', () => {
+    const visible = Array.from({ length: SECTION_CAP }, (_, i) =>
+      comfortableRow(`local-${i}`, { estimateSource: 'measured' })
+    );
+    const hidden = comfortableRow('local-hidden', { estimateSource: 'estimated', footprintGb: 1 });
+    const out = formatCheckTable({ ...sampleResult, rows: [...visible, hidden] }, { color: false });
+    expect(out).not.toContain('estimated from parameter count');
+  });
+
+  it('omits the no-size legend line when the only unclassified row is capped out of view', () => {
+    const visible = Array.from({ length: SECTION_CAP }, (_, i) => comfortableRow(`local-${i}`));
+    const hidden = comfortableRow('local-hidden', {
+      fit: 'unclassified',
+      parameterSizeB: null,
+      quantizationLevel: null,
+      footprintGb: null,
+      baselineVerdict: 'unknown',
+      currentVerdict: 'unknown',
+    });
+    const out = formatCheckTable({ ...sampleResult, rows: [...visible, hidden] }, { color: false });
+    expect(out).not.toContain("couldn't report this model's size");
+  });
+});
+
+describe('Run now qualifier', () => {
+  // The qualifier is a function of the recommended row's fit group, not a
+  // hardcoded "safe bet" — a hardcoded string previously fired even for
+  // tight/over-budget picks, contradicting the group header shown a few lines
+  // below it in the same output.
+  const cases: Array<[import('../src/check.js').FitGroup, string]> = [
+    ['comfortable', 'safe bet'],
+    ['pressured', 'fits the safe budget, but memory is tight right now'],
+    ['tight', 'close to the safe budget'],
+    ['over-budget', 'over the safe budget — fits right now, but needs most of your free memory'],
+    ['unclassified', 'size unknown — bench it to find out'],
+    ['will-thrash', 'nothing here fits comfortably; this is the smallest you have'],
+  ];
+
+  it.each(cases)('renders the %s qualifier: %s', (fit, expected) => {
+    const out = formatCheckTable(
+      {
+        ...sampleResult,
+        rows: [{ ...sampleResult.rows[0], fit }],
+        recommendations: { runNow: 'gemma3:12b', runNowFit: fit, runNowBigger: null, worthPulling: null },
+      },
+      { color: false }
+    );
+    const runNowLine = out.split('\n').find((l) => l.includes('Run now'))!;
+    expect(runNowLine).toContain(expected);
   });
 });
 

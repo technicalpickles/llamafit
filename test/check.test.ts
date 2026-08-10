@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { runCheck, untagged, isNonChat, fitGroup, type CheckDeps } from '../src/check.js';
+import { runCheck, untagged, isNonChat, fitGroup, recommend, type CheckDeps } from '../src/check.js';
 import type { OllamaTagsResponse } from '../src/backends/ollama/client.js';
 import type { ModelInfo } from '../src/types.js';
 import type { SystemMemoryState } from '../src/probes/types.js';
@@ -566,6 +566,44 @@ describe('remote discovery reporting', () => {
     expect(remote).toEqual(['hf.co/other/repo']);
   });
 
+  it('drops a remote candidate matching a collapsed-away alsoTagged name, not just the surviving row name', async () => {
+    // Regression: `ollama cp llama3.2:3b zzz-review-alias` collapses to one
+    // row named e.g. llama3.2:3b with alsoTagged: ['zzz-review-alias:latest'].
+    // localNames used to key off row names only, so 'zzz-review-alias' leaked
+    // back into PULLABLE as a candidate the user already has under another tag.
+    const result = await runCheck('mlx', {
+      backend: fixtureBackend({
+        localModels: async () => ({
+          models: [
+            {
+              name: 'llama3.2:3b',
+              source: 'local',
+              url: null,
+              parameterSizeB: 3,
+              quantizationLevel: 'Q4_K_M',
+              diskSizeBytes: 1,
+              alsoTagged: ['zzz-review-alias:latest'],
+            },
+          ],
+          skipped: [],
+        }),
+        remoteCandidates: async () => ({
+          candidates: [
+            { name: 'zzz-review-alias', source: 'remote', url: null, parameterSizeB: 3, quantizationLevel: 'Q4_K_M', diskSizeBytes: null },
+            { name: 'hf.co/other/repo', source: 'remote', url: null, parameterSizeB: 8, quantizationLevel: 'Q4_K_M', diskSizeBytes: null },
+          ],
+          sources: [{ id: 'huggingface', query: '', ok: true }],
+        }),
+      }),
+      probe: fixtureProbe(fakeSystem),
+      estimator: formulaEstimator,
+      gaps: new GapCollector(),
+    });
+
+    const remote = result.rows.filter((r) => r.source === 'remote').map((r) => r.name);
+    expect(remote).toEqual(['hf.co/other/repo']);
+  });
+
   it('never filters a local model, even one that looks like an embedding model', async () => {
     const result = await runCheck('mlx', {
       backend: fixtureBackend({
@@ -713,6 +751,7 @@ it('returns nulls when a side has no qualifying row', async () => {
   });
   expect(result.recommendations).toEqual({
     runNow: null,
+    runNowFit: null,
     runNowBigger: null,
     worthPulling: null,
   });
@@ -721,7 +760,11 @@ it('returns nulls when a side has no qualifying row', async () => {
 it('recommends the best available group when nothing is comfortable', async () => {
   // A machine under pressure: nothing classifies comfortable, so Run now must
   // still name something rather than going silent. Requiring 'comfortable'
-  // here would regress aa4a7d0.
+  // here would regress aa4a7d0. Under fakeSystem, big:latest (27B) lands
+  // 'over-budget' (fits current headroom, not the baseline budget) while
+  // bigger:latest (30B) fits nowhere ('will-thrash') — over-budget is still on
+  // the RUN_NOW_PREFERENCE ladder, so big:latest must win outright, not by
+  // falling through to any fallback tier.
   const result = await runCheck('mlx', {
     backend: fixtureBackend({
       localModels: async () => ({
@@ -737,8 +780,122 @@ it('recommends the best available group when nothing is comfortable', async () =
     estimator: formulaEstimator,
     gaps: new GapCollector(),
   });
-  expect(result.recommendations.runNow).not.toBeNull();
+  expect(result.recommendations.runNow).toBe('big:latest');
+  expect(result.recommendations.runNowFit).toBe('over-budget');
   expect(result.recommendations.worthPulling).toBeNull();
+});
+
+describe('recommend (Run now ladder and fallback)', () => {
+  function localRow(overrides: Partial<import('../src/check.js').CheckRow> = {}): import('../src/check.js').CheckRow {
+    return {
+      name: 'model',
+      source: 'local',
+      url: null,
+      parameterSizeB: 8,
+      quantizationLevel: 'Q4_K_M',
+      footprintGb: 8,
+      estimateSource: 'estimated',
+      quantKnown: true,
+      baselineVerdict: 'comfortable',
+      currentVerdict: 'comfortable',
+      fit: 'comfortable',
+      ...overrides,
+    };
+  }
+
+  it('prefers comfortable over pressured, whatever the sizes', () => {
+    const rows = [
+      localRow({ name: 'small-comfortable', footprintGb: 2, fit: 'comfortable' }),
+      localRow({ name: 'huge-pressured', footprintGb: 40, fit: 'pressured' }),
+    ];
+    expect(recommend(rows).runNow).toBe('small-comfortable');
+    expect(recommend(rows).runNowFit).toBe('comfortable');
+  });
+
+  it('prefers pressured over tight, whatever the sizes', () => {
+    const rows = [
+      localRow({ name: 'small-pressured', footprintGb: 2, fit: 'pressured' }),
+      localRow({ name: 'huge-tight', footprintGb: 40, fit: 'tight' }),
+    ];
+    expect(recommend(rows).runNow).toBe('small-pressured');
+    expect(recommend(rows).runNowFit).toBe('pressured');
+  });
+
+  it('prefers tight over over-budget, whatever the sizes', () => {
+    const rows = [
+      localRow({ name: 'small-tight', footprintGb: 2, fit: 'tight' }),
+      localRow({ name: 'huge-over-budget', footprintGb: 40, fit: 'over-budget' }),
+    ];
+    expect(recommend(rows).runNow).toBe('small-tight');
+    expect(recommend(rows).runNowFit).toBe('tight');
+  });
+
+  it('falls back to the largest unclassified row when no ladder group has rows', () => {
+    const rows = [
+      localRow({
+        name: 'small-will-thrash',
+        footprintGb: 10,
+        fit: 'will-thrash',
+        baselineVerdict: 'will-thrash',
+        currentVerdict: 'will-thrash',
+      }),
+      localRow({
+        name: 'small-unclassified',
+        footprintGb: null,
+        parameterSizeB: null,
+        quantizationLevel: null,
+        baselineVerdict: 'unknown',
+        currentVerdict: 'unknown',
+        fit: 'unclassified',
+      }),
+      localRow({
+        name: 'big-unclassified',
+        footprintGb: null,
+        parameterSizeB: null,
+        quantizationLevel: null,
+        baselineVerdict: 'unknown',
+        currentVerdict: 'unknown',
+        fit: 'unclassified',
+      }),
+    ];
+    // Unclassified beats will-thrash even though will-thrash carries a real
+    // footprint — this is the aa4a7d0 case: benching an unclassified model is
+    // how it becomes classifiable, so it must win over a model already known
+    // to fit nowhere.
+    const result = recommend(rows);
+    expect(result.runNow).toBe('small-unclassified');
+    expect(result.runNowFit).toBe('unclassified');
+  });
+
+  it('falls back to the smallest will-thrash row when not even unclassified exists', () => {
+    const rows = [
+      localRow({
+        name: 'huge-will-thrash',
+        footprintGb: 30,
+        fit: 'will-thrash',
+        baselineVerdict: 'will-thrash',
+        currentVerdict: 'will-thrash',
+      }),
+      localRow({
+        name: 'small-will-thrash',
+        footprintGb: 10,
+        fit: 'will-thrash',
+        baselineVerdict: 'will-thrash',
+        currentVerdict: 'will-thrash',
+      }),
+    ];
+    const result = recommend(rows);
+    expect(result.runNow).toBe('small-will-thrash');
+    expect(result.runNowFit).toBe('will-thrash');
+  });
+
+  it('never recommends a remote row', () => {
+    const rows = [
+      { ...localRow({ name: 'remote-comfortable', footprintGb: 2, fit: 'comfortable' }), source: 'remote' as const },
+    ];
+    expect(recommend(rows).runNow).toBeNull();
+    expect(recommend(rows).runNowFit).toBeNull();
+  });
 });
 
 it('prefers a classifiable row over an unclassified one when both are present', async () => {

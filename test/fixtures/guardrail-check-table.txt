@@ -1,28 +1,28 @@
 24.0G total  ·  16.0G safe budget (−8.0G reserve)  ·  20.8G free now (−3.2G wired)
 
-Run now        gemma3:12b · 8.6G · safe bet. gemma3:27b (19.3G) is bigger and fits at this moment, but needs most of your free memory
+Run now        gemma3:12b · 8.6G · safe bet
+               gemma3:27b (19.3G) is bigger and fits at this moment, but needs most of your free memory
 Worth pulling  hf.co/ornith-ai/Ornith-1.0-9B-GGUF · 6.3G · Q4_K_M · 4.6M downloads
 
 PULLED (5)
   comfortable
-    gemma3:12b                                                                                8.6G    Q4_K_M
-    cyborgxx101/gemma-4-12b-opus-finetuned-mlx:4bit                                           ~8.4G   Q4_K_M
-    hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:Q4_K_M (:latest)  ~8.4G   Q4_K_M
-    llama3.2:3b                                                                               ~2.3G   Q4_K_M
+    gemma3:12b 8.6G Q4_K_M
+    cyborgxx101/gemma-4-12b-opus-finetuned-mlx:4bit ~8.4G Q4_K_M
+    hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:Q4_K_M (:latest) ~8.4G Q4_K_M
+    llama3.2:3b ~2.3G Q4_K_M
   over the 16.0G safe budget · fits right now, 20.8G free
-    gemma3:27b                                                                                ~19.3G  Q4_K_M
+    gemma3:27b ~19.3G Q4_K_M
 
 PULLABLE (5 of 22, ollama.com + huggingface, by downloads)
   comfortable
-    hf.co/ornith-ai/Ornith-1.0-9B-GGUF                           ~6.3G  Q4_K_M  4.6M dl
-    hf.co/yuxinlu1/gemma-4-12B-coder-fable5-composer2.5-v1-GGUF  ~8.4G  Q4_K_M  282k dl
-    hf.co/RavichandranJ/Dolphin3-Cyber-8B-GGUF                   ~5.6G  Q4_K_M  56k dl
-    hf.co/LiquidAI/LFM2.5-8B-A1B-GGUF                            ~6.0G  Q4_K_M  52k dl
-    hf.co/Jackrong/DeepSeek-V4-Pro-Qwen3.5-9B-MTP-GGUF           ~6.5G  Q4_K_M  44k dl
+    hf.co/ornith-ai/Ornith-1.0-9B-GGUF ~6.3G Q4_K_M 4.6M dl
+    hf.co/yuxinlu1/gemma-4-12B-coder-fable5-composer2.5-v1-GGUF ~8.4G Q4_K_M 282k dl
+    hf.co/RavichandranJ/Dolphin3-Cyber-8B-GGUF ~5.6G Q4_K_M 56k dl
+    hf.co/LiquidAI/LFM2.5-8B-A1B-GGUF ~6.0G Q4_K_M 52k dl
+    hf.co/Jackrong/DeepSeek-V4-Pro-Qwen3.5-9B-MTP-GGUF ~6.5G Q4_K_M 44k dl
     +17 more, 0.3G–24.6G  --remote
 
 ~ = estimated from parameter count and quantization (model not currently loaded)
-? after a quantization = not reported by the backend; assumed for the estimate
 
 Remote candidates are unvetted — see remoteGuidance in --json for how to judge sources.
 

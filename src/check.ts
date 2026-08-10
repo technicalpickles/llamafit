@@ -85,9 +85,16 @@ export interface CheckRow {
 
 export interface Recommendations {
   /** Largest local row in the best available fit group (comfortable →
-   * pressured → tight → over-budget), falling back to the first local row if
-   * none of those has one. Null only when there are no local models. */
+   * pressured → tight → over-budget). If none of those groups has a row,
+   * falls back to the largest `unclassified` row (a never-loaded llama-server
+   * model — benching it is how it becomes classifiable), then the smallest
+   * `will-thrash` row (least-bad, not arbitrary). Null only when there are no
+   * local models at all. */
   runNow: string | null;
+  /** The fit group of the row named by `runNow`, so renderers can pick a
+   * qualifier that matches the group instead of assuming "safe bet" for every
+   * pick. Null exactly when runNow is null. Additive to the --json contract. */
+  runNowFit: FitGroup | null;
   /** A larger local row in `over-budget`, mentioned as the bigger-but-riskier option. */
   runNowBigger: string | null;
   /** Highest-ranked remote row in `comfortable`. Rows arrive pre-sorted by downloads. */
@@ -129,31 +136,44 @@ const RUN_NOW_PREFERENCE: readonly FitGroup[] = [
 /** Computed rather than inferred from sort position, so the recommendation can
  * encode nuance a sort order cannot — notably that the largest model a machine
  * can run right now may be one the conservative budget rejects. */
-function recommend(rows: CheckRow[]): Recommendations {
+export function recommend(rows: CheckRow[]): Recommendations {
   const biggest = (candidates: CheckRow[]): CheckRow | null =>
     candidates.length === 0
       ? null
       : candidates.reduce((a, b) => ((b.footprintGb ?? 0) > (a.footprintGb ?? 0) ? b : a));
+  const smallest = (candidates: CheckRow[]): CheckRow | null =>
+    candidates.length === 0
+      ? null
+      : candidates.reduce((a, b) =>
+          (b.footprintGb ?? Infinity) < (a.footprintGb ?? Infinity) ? b : a
+        );
 
   const local = rows.filter((r) => r.source === 'local');
   // Preference order, not a filter. Insisting on 'comfortable' would print no
-  // hint at all on a machine whose models are all tight or over-budget, and the
-  // final fallback preserves aa4a7d0: on llama-server a never-loaded model
-  // reports no size, and benching it is exactly how it becomes classifiable, so
-  // declining to name it leaves the user no way forward.
+  // hint at all on a machine whose models are all tight or over-budget. Beyond
+  // the ladder, the fallback is explicit and ordered rather than "first local
+  // row": prefer the largest unclassified row (this is the aa4a7d0 case — on
+  // llama-server a never-loaded model reports no size, and benching it is
+  // exactly how it becomes classifiable), and only when there isn't even one
+  // of those, the *smallest* will-thrash row — the least-bad option, not
+  // whatever happened to be listed first.
   const preferred = RUN_NOW_PREFERENCE.map((g) =>
     biggest(local.filter((r) => r.fit === g))
   ).find((r) => r !== null);
-  const runNow = preferred ?? local[0] ?? null;
+  const runNowRow =
+    preferred ??
+    biggest(local.filter((r) => r.fit === 'unclassified')) ??
+    smallest(local.filter((r) => r.fit === 'will-thrash'));
   const overBudget = biggest(local.filter((r) => r.fit === 'over-budget'));
   // Rows arrive pre-sorted by downloads, so the first match is the top-ranked one.
   const worthPulling =
     rows.find((r) => r.source === 'remote' && r.fit === 'comfortable') ?? null;
 
   return {
-    runNow: runNow?.name ?? null,
+    runNow: runNowRow?.name ?? null,
+    runNowFit: runNowRow?.fit ?? null,
     runNowBigger:
-      overBudget && (overBudget.footprintGb ?? 0) > (runNow?.footprintGb ?? 0)
+      overBudget && (overBudget.footprintGb ?? 0) > (runNowRow?.footprintGb ?? 0)
         ? overBudget.name
         : null,
     worthPulling: worthPulling?.name ?? null,
@@ -295,7 +315,14 @@ export async function runCheck(query: string | undefined, deps: CheckDeps): Prom
     };
   });
 
-  const localNames = new Set(localRows.map((r) => untagged(r.name)));
+  // Includes alsoTagged: digest collapse means a name can vanish from row
+  // names entirely (e.g. `ollama cp llama3.2:3b zzz-review-alias` collapses to
+  // one row, and either name could be the one that didn't survive), so
+  // dedup against row names alone would let the collapsed-away name leak back
+  // into PULLABLE as a candidate the user already has.
+  const localNames = new Set(
+    localRows.flatMap((r) => [r.name, ...(r.alsoTagged ?? [])]).map(untagged)
+  );
   const remoteRows: CheckRow[] = remoteCandidates
     .filter((c) => c.parameterSizeB !== null)
     .filter((c) => !localNames.has(untagged(c.name)))
