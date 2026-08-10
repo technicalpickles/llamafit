@@ -1,4 +1,5 @@
 import type { CheckResult, CheckRow, FitGroup } from '../check.js';
+import { byDownloadsDesc } from '../check.js';
 import { label, dim } from '../colors.js';
 import type { FormatOptions } from './bench.js';
 import { splitModelTag } from '../model-names.js';
@@ -56,11 +57,6 @@ function bySizeDesc(a: CheckRow, b: CheckRow): number {
   if (a.footprintGb === null) return b.footprintGb === null ? 0 : 1;
   if (b.footprintGb === null) return -1;
   return b.footprintGb - a.footprintGb;
-}
-
-/** Downloads descending, nulls last. */
-function byDownloadsDesc(a: CheckRow, b: CheckRow): number {
-  return (b.signals?.downloads ?? -1) - (a.signals?.downloads ?? -1);
 }
 
 /** Flattens to display order: group order first, `within` descending inside

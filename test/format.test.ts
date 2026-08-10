@@ -592,6 +592,32 @@ describe('formatCheckTable sections', () => {
     expect(order).toEqual(['small-but-popular', 'mid-mid', 'big-but-unpopular']);
   });
 
+  it('sorts a zero-downloads PULLABLE row above one with no download count at all', () => {
+    // Same `?? -1` contract as the domain ranking: `|| -1` would collapse
+    // `downloads: 0` into "no signal", tie the two rows, and leave the input
+    // order (the no-count row first) standing.
+    const base = {
+      ...sampleResult.rows[0],
+      source: 'remote' as const,
+      fit: 'comfortable' as const,
+      footprintGb: 4,
+    };
+    const rows: CheckRow[] = [
+      { ...base, name: 'no-count', signals: null },
+      {
+        ...base,
+        name: 'zero-count',
+        signals: { downloads: 0, likes: 0, trendingScore: 0, lastModified: null },
+      },
+    ];
+    const out = formatCheckTable({ ...sampleResult, rows }, { color: false });
+    const order = out
+      .split('\n')
+      .filter((l) => /^ {4}(zero|no)-count\b/.test(l))
+      .map((l) => l.trim().split(/\s+/)[0]);
+    expect(order).toEqual(['zero-count', 'no-count']);
+  });
+
   it('renders both recommendation lines when both sides qualify', () => {
     const out = formatCheckTable(
       {

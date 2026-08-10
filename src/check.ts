@@ -133,6 +133,17 @@ const RUN_NOW_PREFERENCE: readonly FitGroup[] = [
   'over-budget',
 ];
 
+/** Downloads descending, nulls last. Shared by the domain ranking (which fixes
+ * the order rows arrive in) and the PULLABLE renderer (which re-sorts within
+ * each fit group), so the two can't drift apart.
+ *
+ * `?? -1` and not `|| -1`: a row with `downloads: 0` reported a real count of
+ * zero and must still outrank a row that reported no count at all. `||` would
+ * fold both onto the same sentinel. */
+export function byDownloadsDesc(a: CheckRow, b: CheckRow): number {
+  return (b.signals?.downloads ?? -1) - (a.signals?.downloads ?? -1);
+}
+
 /** Computed rather than inferred from sort position, so the recommendation can
  * encode nuance a sort order cannot — notably that the largest model a machine
  * can run right now may be one the conservative budget rejects. */
@@ -358,9 +369,7 @@ export async function runCheck(query: string | undefined, deps: CheckDeps): Prom
   // fixture it ranks a 928-download 0.1B model above a 4.5M-download 9B one.
   // downloads is already in the payload and answers "is this worth pulling"
   // far better. trendingScore stays on the row for --json consumers.
-  const rankedRemoteRows = [...remoteRows].sort(
-    (a, b) => (b.signals?.downloads ?? -1) - (a.signals?.downloads ?? -1)
-  );
+  const rankedRemoteRows = [...remoteRows].sort(byDownloadsDesc);
 
   const rows = [...localRows, ...rankedRemoteRows];
 

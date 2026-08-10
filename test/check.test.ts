@@ -366,6 +366,29 @@ describe('runCheck', () => {
     expect(remote).toEqual(['many', 'few', 'none']);
   });
 
+  it('ranks a zero-downloads row above one with no download count at all', async () => {
+    // The `?? -1` in the ranking comparator is load-bearing: `|| -1` would
+    // treat `downloads: 0` as "no download signal" and tie it with the null
+    // row, leaving the input order (null first) untouched by the sort.
+    const result = await runCheck('mlx', {
+      backend: fixtureBackend({
+        remoteCandidates: async () => ({
+          candidates: [
+            { name: 'no-count', source: 'remote', url: null, parameterSizeB: 7, quantizationLevel: 'Q4_K_M', diskSizeBytes: null, signals: { downloads: null, likes: 0, trendingScore: 0, lastModified: null } },
+            { name: 'zero-count', source: 'remote', url: null, parameterSizeB: 7, quantizationLevel: 'Q4_K_M', diskSizeBytes: null, signals: { downloads: 0, likes: 0, trendingScore: 0, lastModified: null } },
+          ],
+          sources: [{ id: 'huggingface', query: '', ok: true }],
+        }),
+      }),
+      probe: fixtureProbe(fakeSystem),
+      estimator: formulaEstimator,
+      gaps: new GapCollector(),
+    });
+
+    const remote = result.rows.filter((r) => r.source === 'remote').map((r) => r.name);
+    expect(remote).toEqual(['zero-count', 'no-count']);
+  });
+
   it('keeps local rows ahead of remote rows', async () => {
     const result = await runCheck('mlx', {
       backend: fixtureBackend(),
