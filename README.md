@@ -10,8 +10,8 @@ push the whole system into heavy swap, because VRAM-footprint reporting like
   locally-pulled models plus remote candidates from `ollama.com/search` and
   Hugging Face Hub (pullable as `hf.co/<owner>/<repo>:<quant>`), estimates
   memory footprint from parameter count and quantization, and classifies
-  each as comfortable / tight / will-thrash against both a fixed baseline
-  reserve and whatever's actually free right now.
+  each into a fit group — `comfortable` through `will-thrash` — against
+  both a fixed baseline reserve and whatever's actually free right now.
 - **`llamafit bench <model>`** — live benchmark. Pulls (if needed), loads,
   runs a fixed prompt, and reports real VRAM usage, tokens/sec, and the
   before/after system memory and swap delta.
@@ -82,9 +82,13 @@ Within a section, rows are grouped by fit rather than printed as a flat list:
 `comfortable` first, then `pressured` (fits the safe budget but memory is
 tight right now), `tight`, `over-budget` (fails the safe budget but happens
 to fit given what's free this moment), `will-thrash`, and `unclassified`
-(the backend didn't report enough to size it). A `Run now` / `Worth pulling`
-line above the sections calls out the single best answer in each category
-when there is one.
+(the backend didn't report enough to size it). Above the sections, `Run now`
+names the best local model to reach for — it's there on any run that has
+local models at all, working down through the fit groups and falling back to
+whatever's pulled if none of them fit comfortably. `Worth pulling` is the
+opposite: it only appears when a remote candidate is actually `comfortable`,
+which on a smaller machine, or a narrow `--query`, is often nothing — no
+line there is normal, not a sign something's missing.
 
 A model that's currently loaded (visible in Ollama's `/api/ps`) reports its
 real resident size, so its footprint prints bare. Everything else is a formula
@@ -95,6 +99,15 @@ guess rather than a number.
 Cloud-only models (Ollama's `:cloud` tag) aren't sized at all, so they're
 left out of the table entirely; they still show up under `cloudModels` in
 `--json`.
+
+Two lines close out a normal run. Whenever remote candidates carry download
+or trending signals, a `Remote candidates are unvetted` note points at
+`remoteGuidance` in `--json` for how to weigh those signals. And whenever
+`Run now` has a model to suggest, a `Next: llamafit bench <model> …` line
+follows — copy-paste it to get real numbers instead of the estimate. It
+pins `--backend` on purpose (when one was detected or passed to `check`),
+so pasting it can't silently re-detect and land on a different backend than
+the one the table's rows came from.
 
 ### About "current headroom"
 
