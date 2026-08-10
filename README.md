@@ -51,6 +51,10 @@ A few flags worth knowing about:
 - `--json` (on `check`) prints machine-readable output on stdout; warnings
   and gap reporting still go to stderr, so piping the table doesn't pick up
   the chatter.
+- `--local` / `--remote` / `--all` (on `check`) expand the capped local or
+  remote section (or both) to show every row instead of the default top few
+  plus a `+N more`. `--local --remote` together is rejected; use `--all`
+  for that.
 
 Point at a non-default server with `OLLAMA_HOST` (Ollama) or
 `LLAMA_SERVER_BASE_URL` (llama-server), either as `host:port` or a full URL:
@@ -67,11 +71,30 @@ LLAMA_SERVER_BASE_URL=http://192.168.1.50:8080 llamafit check
 
 ## Reading the check table
 
+The header line gives the two numbers everything else is relative to: the
+safe budget (total memory minus a fixed reserve) and current headroom (what's
+actually free right now). Every row below is one of two sources, `PULLED`
+(models already local) or `PULLABLE` (remote candidates from `ollama.com`
+and Hugging Face), each capped to a handful of rows unless you pass
+`--local`, `--remote`, or `--all`.
+
+Within a section, rows are grouped by fit rather than printed as a flat list:
+`comfortable` first, then `pressured` (fits the safe budget but memory is
+tight right now), `tight`, `over-budget` (fails the safe budget but happens
+to fit given what's free this moment), `will-thrash`, and `unclassified`
+(the backend didn't report enough to size it). A `Run now` / `Worth pulling`
+line above the sections calls out the single best answer in each category
+when there is one.
+
 A model that's currently loaded (visible in Ollama's `/api/ps`) reports its
 real resident size, so its footprint prints bare. Everything else is a formula
 estimate and gets a `~`. A `?` after the quantization means the backend didn't
 report one and the estimate assumed `Q4_K_M`, so treat that row as a rough
 guess rather than a number.
+
+Cloud-only models (Ollama's `:cloud` tag) aren't sized at all, so they're
+left out of the table entirely; they still show up under `cloudModels` in
+`--json`.
 
 ### About "current headroom"
 
