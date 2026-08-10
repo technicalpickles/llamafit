@@ -166,6 +166,97 @@ describe('check command wiring', () => {
     expect(h.stdout[0]).toMatch(/^\d+(\.\d+)?G total/);
   });
 
+  /** The stock fixture's PULLED section collapses to exactly SECTION_CAP (5) rows, so it
+   * never overflows on its own — these tests synthesize enough local models to force the
+   * cap, so `--local` has something real to uncap. */
+  function manyLocalModels(count: number) {
+    return async () => ({
+      models: Array.from({ length: count }, (_, i) => ({
+        name: `local-model-${i}`,
+        source: 'local' as const,
+        url: null,
+        parameterSizeB: 7,
+        quantizationLevel: 'Q4_K_M',
+        diskSizeBytes: 4_000_000_000,
+      })),
+      skipped: [],
+    });
+  }
+
+  it('--local uncaps the local section but leaves the remote +N more line', async () => {
+    const backend = fixtureBackend({ localModels: manyLocalModels(8) });
+    const h = harness({
+      detectBackends: async () => [
+        { backend, detection: { detected: true, version: '0.0.0', evidence: {} } },
+      ],
+    });
+
+    await runCheckCommand({ ...CHECK_OPTS, local: true }, h.deps);
+
+    const out = h.stdout.join('\n');
+    const [pulledSection] = out.split('PULLABLE');
+    expect(pulledSection).not.toMatch(/\+\d+ more/);
+    expect(out).toMatch(/\+\d+ more/);
+  });
+
+  it('--remote uncaps the remote section but leaves the local +N more line', async () => {
+    const backend = fixtureBackend({ localModels: manyLocalModels(8) });
+    const h = harness({
+      detectBackends: async () => [
+        { backend, detection: { detected: true, version: '0.0.0', evidence: {} } },
+      ],
+    });
+
+    await runCheckCommand({ ...CHECK_OPTS, remote: true }, h.deps);
+
+    const out = h.stdout.join('\n');
+    const [, pullableSection = ''] = out.split('PULLABLE');
+    expect(pullableSection).not.toMatch(/\+\d+ more/);
+    expect(out).toMatch(/\+\d+ more/);
+  });
+
+  it('--all uncaps both sections', async () => {
+    const backend = fixtureBackend({ localModels: manyLocalModels(8) });
+    const h = harness({
+      detectBackends: async () => [
+        { backend, detection: { detected: true, version: '0.0.0', evidence: {} } },
+      ],
+    });
+
+    await runCheckCommand({ ...CHECK_OPTS, all: true }, h.deps);
+
+    expect(h.stdout.join('\n')).not.toMatch(/\+\d+ more/);
+  });
+
+  it('rejects --local together with --remote, before ever probing backends', async () => {
+    const h = harness({
+      detectBackends: async () => {
+        throw new Error('should not reach detection: mutual-exclusion check must run first');
+      },
+    });
+
+    await runCheckCommand({ ...CHECK_OPTS, local: true, remote: true }, h.deps);
+
+    expect(h.stderr.join('\n')).toContain('--all');
+    expect(h.exit.code).toBe(1);
+    expect(h.stdout).toEqual([]);
+  });
+
+  it('--all alongside --json leaves the JSON output unchanged', async () => {
+    const backend = fixtureBackend();
+    const detected = async () => [
+      { backend, detection: { detected: true, version: '0.0.0', evidence: {} } },
+    ];
+
+    const plain = harness({ detectBackends: detected });
+    await runCheckCommand({ ...CHECK_OPTS, json: true }, plain.deps);
+
+    const expanded = harness({ detectBackends: detected });
+    await runCheckCommand({ ...CHECK_OPTS, json: true, all: true }, expanded.deps);
+
+    expect(expanded.stdout.join('\n')).toBe(plain.stdout.join('\n'));
+  });
+
   it('multiple backends get a heading per table, and a keyed object in --json', async () => {
     const first = fixtureBackend({ id: 'one', displayName: 'Backend One' });
     const second = fixtureBackend({ id: 'two', displayName: 'Backend Two' });
