@@ -143,7 +143,7 @@ describe('check command wiring', () => {
     await runCheckCommand({ ...CHECK_OPTS, diagnose: true }, h.deps);
 
     expect(h.exit.code).toBe(0);
-    expect(h.stdout.join('\n')).toContain('MODEL');
+    expect(h.stdout.join('\n')).toContain('safe budget');
     expect(h.bundles()).toHaveLength(1);
     const bundle = JSON.parse(readFileSync(join(h.bundleDir, h.bundles()[0]), 'utf8'));
     expect(bundle.gaps).toEqual([]);
@@ -162,7 +162,8 @@ describe('check command wiring', () => {
 
     expect(h.exit.code).toBe(0);
     expect(h.stdout).toHaveLength(1);
-    expect(h.stdout[0].startsWith('MODEL')).toBe(true);
+    // No backend heading precedes the table itself when there's only one backend.
+    expect(h.stdout[0]).toMatch(/^\d+(\.\d+)?G total/);
   });
 
   it('multiple backends get a heading per table, and a keyed object in --json', async () => {
@@ -224,7 +225,7 @@ describe('check command wiring', () => {
     expect(err).not.toContain('issues/new?');
     expect(err).not.toContain("doesn't support yet");
     expect(h.bundles()).toEqual([]);
-    expect(h.stdout.join('\n')).toContain('MODEL');
+    expect(h.stdout.join('\n')).toContain('safe budget');
   });
 
   it('--diagnose still records a scrape failure in the bundle, without prompting for it', async () => {
@@ -266,7 +267,7 @@ describe('check command wiring', () => {
     expect(err).toContain('could not write the diagnostics bundle');
     expect(err).toContain('EROFS');
     // The table printed and the check itself succeeded, so the run is still a success.
-    expect(h.stdout.join('\n')).toContain('MODEL');
+    expect(h.stdout.join('\n')).toContain('safe budget');
     expect(h.exit.code).toBe(0);
   });
 
@@ -323,7 +324,7 @@ describe('check command wiring', () => {
     // per-backend heading) — the point is that it renders at all instead of being
     // dropped along with the backend that threw.
     const out = h.stdout.join('\n');
-    expect(out).toContain('MODEL');
+    expect(out).toContain('safe budget');
     expect(h.exit.code).toBe(0);
   });
 

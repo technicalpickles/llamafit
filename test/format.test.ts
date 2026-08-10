@@ -5,6 +5,7 @@ import { formatBenchResult } from '../src/format.js';
 import type { BenchResult } from '../src/bench.js';
 import type { PullProgress } from '../src/backends/types.js';
 import { REMOTE_GUIDANCE } from '../src/hf/guidance.js';
+import { SECTION_CAP } from '../src/format/check.js';
 
 const sampleResult: CheckResult = {
   rows: [
@@ -22,7 +23,7 @@ const sampleResult: CheckResult = {
       fit: 'pressured',
     },
   ],
-  recommendations: { runNow: null, runNowBigger: null, worthPulling: null },
+  recommendations: { runNow: 'gemma3:12b', runNowBigger: null, worthPulling: null },
   cloudModels: ['glm-5.2:cloud'],
   system: {
     totalGb: 24,
@@ -42,19 +43,6 @@ const sampleResult: CheckResult = {
 };
 
 describe('formatCheckTable', () => {
-  it('includes the model name and both verdicts', () => {
-    const table = formatCheckTable(sampleResult);
-    expect(table).toContain('gemma3:12b');
-    expect(table).toContain('comfortable');
-    expect(table).toContain('will-thrash');
-  });
-
-  it('lists cloud models separately with a note that they run remotely', () => {
-    const table = formatCheckTable(sampleResult);
-    expect(table).toContain('glm-5.2:cloud');
-    expect(table.toLowerCase()).toContain('cloud');
-  });
-
   it('keeps the scrape warning out of the table (the CLI prints it on stderr)', () => {
     const table = formatCheckTable({ ...sampleResult, scrapeWarning: 'could not reach ollama.com' });
     expect(table).not.toContain('could not reach ollama.com');
@@ -79,36 +67,10 @@ describe('formatCheckTable', () => {
         },
       ],
     });
-    const row = table.split('\n').find((l) => l.startsWith('pd95/gptoss-mlx'))!;
+    const row = table.split('\n').find((l) => l.includes('pd95/gptoss-mlx'))!;
     expect(row).toContain('~14.1'); // estimated, not measured
     expect(row).toContain('Q4_K_M?'); // quantization was assumed
     expect(table).toContain('quantization not reported');
-  });
-
-  it('lists a link for each remote candidate, so an unfamiliar model is one click away', () => {
-    const table = formatCheckTable({
-      ...sampleResult,
-      rows: [
-        ...sampleResult.rows,
-        {
-          name: 'pd95/gptoss-mlx',
-          source: 'remote',
-          url: 'https://ollama.com/pd95/gptoss-mlx',
-          parameterSizeB: 20,
-          quantizationLevel: 'Q4_K_M',
-          footprintGb: 14.06,
-          estimateSource: 'estimated',
-          quantKnown: false,
-          baselineVerdict: 'will-thrash',
-          currentVerdict: 'will-thrash',
-          fit: 'will-thrash',
-        },
-      ],
-    });
-    expect(table).toContain('pd95/gptoss-mlx');
-    expect(table).toContain('https://ollama.com/pd95/gptoss-mlx');
-    // the local row shouldn't get a spurious link line
-    expect(table.split('\n').filter((l) => l.includes('ollama.com')).length).toBe(1);
   });
 
   it('explains the bare "?" with a legend when a local model has no reported size (e.g. an unloaded llama-server model)', () => {
@@ -130,9 +92,10 @@ describe('formatCheckTable', () => {
         },
       ],
     });
-    const row = table.split('\n').find((l) => l.startsWith('qwen3-30b'))!;
-    // PARAMS(B), QUANT, and FOOTPRINT(GB) all fall back to a bare "?".
-    expect(row.split(/\s{2,}/).filter((cell) => cell === '?')).toHaveLength(3);
+    const row = table.split('\n').find((l) => l.includes('qwen3-30b'))!;
+    // FOOTPRINT and QUANT both fall back to a bare "?" (there's no separate
+    // PARAMS(B) column in the section rendering).
+    expect(row.split(/\s{2,}/).filter((cell) => cell === '?')).toHaveLength(2);
     expect(table).toContain("backend couldn't report this model's size");
   });
 
@@ -157,7 +120,7 @@ describe('formatCheckTable', () => {
     });
     expect(table).not.toContain('~');
     expect(table).not.toContain('Q4_K_M?');
-    const row = table.split('\n').find((l) => l.startsWith('gemma3:12b'))!;
+    const row = table.split('\n').find((l) => l.includes('gemma3:12b'))!;
     expect(row).toContain('8.6');
   });
 });
@@ -169,36 +132,12 @@ describe('bench hint', () => {
   });
 
   it('omits the hint when there are no models to benchmark', () => {
-    const table = formatCheckTable({ ...sampleResult, rows: [] });
+    const table = formatCheckTable({
+      ...sampleResult,
+      rows: [],
+      recommendations: { runNow: null, runNowBigger: null, worthPulling: null },
+    });
     expect(table).not.toContain('llamafit bench');
-  });
-
-  it('skips a row check could not classify (unknown verdict) in favor of one it could', () => {
-    const unknownRow = {
-      ...sampleResult.rows[0],
-      name: 'qwen3-30b',
-      parameterSizeB: null,
-      quantizationLevel: null,
-      footprintGb: null,
-      baselineVerdict: 'unknown' as const,
-      currentVerdict: 'unknown' as const,
-      fit: 'unclassified' as const,
-    };
-    const table = formatCheckTable({ ...sampleResult, rows: [unknownRow, ...sampleResult.rows] });
-    expect(table).toContain('llamafit bench gemma3:12b');
-    expect(table).not.toContain('llamafit bench qwen3-30b');
-  });
-
-  it('falls back to the first row when every row is unclassified', () => {
-    const unknownRow = {
-      ...sampleResult.rows[0],
-      name: 'qwen3-30b',
-      baselineVerdict: 'unknown' as const,
-      currentVerdict: 'unknown' as const,
-      fit: 'unclassified' as const,
-    };
-    const table = formatCheckTable({ ...sampleResult, rows: [unknownRow] });
-    expect(table).toContain('llamafit bench qwen3-30b');
   });
 
   it('includes --backend when the table is scoped to one backend, so a copy-pasted command can\'t autodetect its way to the wrong one', () => {
@@ -213,18 +152,6 @@ describe('bench hint', () => {
 });
 
 describe('remote sources footer', () => {
-  it('names each source with the query it ran', () => {
-    const result: CheckResult = {
-      ...sampleResult,
-      remoteSources: [
-        { id: 'ollama.com', query: 'mlx', ok: true },
-        { id: 'huggingface', query: '', ok: true },
-      ],
-    };
-    const out = formatCheckTable(result);
-    expect(out).toContain('Remote sources: ollama.com search "mlx" · huggingface (default list)');
-  });
-
   it('marks a failed source inline', () => {
     const result: CheckResult = {
       ...sampleResult,
@@ -242,55 +169,6 @@ describe('remote sources footer', () => {
 });
 
 describe('remote candidate rendering', () => {
-  it('appends a truncated quant list to remote link lines', () => {
-    const result: CheckResult = {
-      ...sampleResult,
-      rows: [
-        {
-          name: 'pd95/gptoss-mlx',
-          source: 'remote',
-          url: 'https://ollama.com/pd95/gptoss-mlx',
-          parameterSizeB: 20,
-          quantizationLevel: 'Q4_K_M',
-          footprintGb: 14.06,
-          estimateSource: 'estimated',
-          quantKnown: false,
-          baselineVerdict: 'will-thrash',
-          currentVerdict: 'will-thrash',
-          fit: 'will-thrash',
-          availableQuants: ['Q4_K_M', 'Q5_K_M', 'Q8_0', 'F16', 'BF16', 'IQ4_XS'],
-        },
-      ],
-      remoteGuidance: null,
-    };
-    const out = formatCheckTable(result);
-    expect(out).toContain('quants: Q4_K_M, Q5_K_M, Q8_0, F16, +2 more');
-  });
-
-  it('omits the quant note when a remote row has none', () => {
-    const result: CheckResult = {
-      ...sampleResult,
-      rows: [
-        {
-          name: 'mxbai-embed-large',
-          source: 'remote',
-          url: 'https://ollama.com/library/mxbai-embed-large',
-          parameterSizeB: 0.3,
-          quantizationLevel: 'Q4_K_M',
-          footprintGb: 0.2,
-          estimateSource: 'estimated',
-          quantKnown: false,
-          baselineVerdict: 'comfortable',
-          currentVerdict: 'comfortable',
-          fit: 'comfortable',
-        },
-      ],
-      remoteGuidance: null,
-    };
-    const out = formatCheckTable(result);
-    expect(out).not.toContain('quants:');
-  });
-
   it('prints a guidance footer only when remoteGuidance is set', () => {
     const withGuidance: CheckResult = { ...sampleResult, remoteGuidance: REMOTE_GUIDANCE };
     const withoutGuidance: CheckResult = { ...sampleResult, remoteGuidance: null };
@@ -313,15 +191,26 @@ describe('formatCheckTable color', () => {
     expect(table).not.toContain('\x1b[');
   });
 
-  it('colors verdicts without breaking column alignment when color is enabled', () => {
-    const table = formatCheckTable(sampleResult, { color: true });
-    expect(table).toContain('\x1b[');
-    expect(table).toContain('comfortable');
-    expect(table).toContain('will-thrash');
-    // Every data row and the header should still line up to the same visible width.
-    const dataLine = table.split('\n').find((l) => l.startsWith('gemma3:12b'))!;
-    const headerLine = table.split('\n')[0];
-    expect(stripAnsi(dataLine).indexOf('comfortable')).toBe(stripAnsi(headerLine).indexOf('BASELINE'));
+  it('colors section titles and group labels without disturbing row-cell alignment', () => {
+    // Section titles (label()) and group headers (dim()) carry ANSI codes; the
+    // row cells themselves don't (cells() is passed as both the display and
+    // plain args to formatRow), so a colorized run's data rows must be
+    // byte-identical to the uncolored run's — nothing computes width from a
+    // colorized string here, but this pins that invariant so it stays true.
+    const rows = [
+      { ...sampleResult.rows[0], name: 'gemma3:12b', footprintGb: 8.58, fit: 'comfortable' as const },
+      { ...sampleResult.rows[0], name: 'a-much-longer-model-name', footprintGb: 2.3, fit: 'comfortable' as const },
+    ];
+    const colored = formatCheckTable({ ...sampleResult, rows }, { color: true });
+    const plain = formatCheckTable({ ...sampleResult, rows }, { color: false });
+    expect(colored).toContain('\x1b[');
+    // Row lines are indented four spaces under their group header; matching that
+    // indent (rather than a bare substring search) avoids matching the "Run now"
+    // recommendation line, which also names the model but is colorized.
+    const rowLine = (out: string, name: string) =>
+      out.split('\n').find((l) => new RegExp(`^ {4}${name}`).test(l))!;
+    expect(rowLine(colored, 'gemma3:12b')).toBe(rowLine(plain, 'gemma3:12b'));
+    expect(rowLine(colored, 'a-much-longer-model-name')).toBe(rowLine(plain, 'a-much-longer-model-name'));
   });
 });
 
@@ -329,6 +218,139 @@ function stripAnsi(text: string): string {
   // eslint-disable-next-line no-control-regex
   return text.replace(/\x1b\[[0-9;]*m/g, '');
 }
+
+describe('formatCheckTable sections', () => {
+  it('leads with a one-line header carrying both headroom figures', () => {
+    const out = formatCheckTable(sampleResult, { color: false });
+    const first = out.split('\n')[0];
+    expect(first).toContain('24.0G total');
+    expect(first).toContain('16.0G safe budget');
+    expect(first).toMatch(/free now/);
+  });
+
+  it('never renders cloud models', () => {
+    const out = formatCheckTable(
+      { ...sampleResult, cloudModels: ['glm-5.2:cloud', 'gemma4:cloud'] },
+      { color: false }
+    );
+    expect(out).not.toContain('glm-5.2:cloud');
+    expect(out).not.toContain('Cloud models');
+  });
+
+  it('renders a group header per fit group present, not a verdict column', () => {
+    const out = formatCheckTable(sampleResult, { color: false });
+    expect(out).not.toContain('BASELINE');
+    expect(out).not.toContain('CURRENT');
+    // sampleResult's row is comfortable/will-thrash → pressured
+    expect(out).toMatch(/tight right now/);
+  });
+
+  it('caps a section and reports what was withheld', () => {
+    const many = Array.from({ length: 9 }, (_, i) => ({
+      ...sampleResult.rows[0],
+      name: `local-${i}`,
+      footprintGb: 8 - i,
+      fit: 'comfortable' as const,
+      baselineVerdict: 'comfortable' as const,
+      currentVerdict: 'comfortable' as const,
+    }));
+    const out = formatCheckTable({ ...sampleResult, rows: many }, { color: false });
+    expect(out).toContain(`+${9 - SECTION_CAP} more`);
+    expect(out).toContain('--local');
+    expect(out).toContain('local-0');
+    expect(out).not.toContain('local-8');
+  });
+
+  it('emits no overflow line at exactly the cap', () => {
+    const exactly = Array.from({ length: SECTION_CAP }, (_, i) => ({
+      ...sampleResult.rows[0],
+      name: `local-${i}`,
+      fit: 'comfortable' as const,
+      baselineVerdict: 'comfortable' as const,
+      currentVerdict: 'comfortable' as const,
+    }));
+    const out = formatCheckTable({ ...sampleResult, rows: exactly }, { color: false });
+    expect(out).not.toContain('more');
+  });
+
+  it('uncaps the section named by expand', () => {
+    const many = Array.from({ length: 9 }, (_, i) => ({
+      ...sampleResult.rows[0],
+      name: `local-${i}`,
+      fit: 'comfortable' as const,
+      baselineVerdict: 'comfortable' as const,
+      currentVerdict: 'comfortable' as const,
+    }));
+    const out = formatCheckTable({ ...sampleResult, rows: many }, {
+      color: false,
+      expand: 'local',
+    });
+    expect(out).toContain('local-8');
+    expect(out).not.toContain('more');
+  });
+
+  it('shows collapsed tags inline', () => {
+    const out = formatCheckTable(
+      {
+        ...sampleResult,
+        rows: [{ ...sampleResult.rows[0], alsoTagged: ['gemma3:latest'] }],
+      },
+      { color: false }
+    );
+    expect(out).toContain('gemma3:latest');
+  });
+
+  it('renders both recommendation lines when both sides qualify', () => {
+    const out = formatCheckTable(
+      {
+        ...sampleResult,
+        recommendations: {
+          runNow: 'gemma3:12b',
+          runNowBigger: 'gemma3:27b',
+          worthPulling: 'ornith-ai/Ornith-1.0-9B-GGUF',
+        },
+      },
+      { color: false }
+    );
+    expect(out).toContain('Run now');
+    expect(out).toContain('gemma3:27b');
+    expect(out).toContain('Worth pulling');
+    expect(out).toContain('ornith-ai/Ornith-1.0-9B-GGUF');
+  });
+
+  it('omits a recommendation line whose side is empty', () => {
+    const out = formatCheckTable(
+      {
+        ...sampleResult,
+        recommendations: { runNow: 'gemma3:12b', runNowBigger: null, worthPulling: null },
+      },
+      { color: false }
+    );
+    expect(out).toContain('Run now');
+    expect(out).not.toContain('Worth pulling');
+  });
+
+  it('says so plainly when a side is empty', () => {
+    const out = formatCheckTable(
+      {
+        ...sampleResult,
+        rows: [],
+        recommendations: { runNow: null, runNowBigger: null, worthPulling: null },
+      },
+      { color: false }
+    );
+    expect(out).toContain('No models pulled yet');
+    expect(out).toContain('No remote candidates found');
+  });
+
+  it('still pins --backend in the bench hint', () => {
+    const out = formatCheckTable(
+      { ...sampleResult, recommendations: { runNow: 'gemma3:12b', runNowBigger: null, worthPulling: null } },
+      { color: false, backendId: 'ollama' }
+    );
+    expect(out).toContain('llamafit bench gemma3:12b --backend ollama');
+  });
+});
 
 describe('formatBenchResult', () => {
   const memoryBefore = {

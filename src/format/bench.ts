@@ -15,6 +15,8 @@ export interface FormatOptions {
    * caused: a name pasted from the llama-server table, benched with no --backend, resolved
    * to Ollama and failed). */
   backendId?: string;
+  /** Which section to render uncapped. Undefined caps both. */
+  expand?: 'local' | 'remote' | 'all';
 }
 
 /** Printed in place of a duration/rate the backend didn't report, so degraded output
