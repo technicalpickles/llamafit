@@ -339,8 +339,11 @@ export async function runCheck(query: string | undefined, deps: CheckDeps): Prom
     .filter((c) => !localNames.has(untagged(c.name)))
     .filter((c) => !isNonChat(c.name))
     .map((c) => {
-      // Remote candidates never carry a quantization — the fallback is expected here,
-      // so it is reported per-row via quantKnown rather than as a gap.
+      // Whether a remote candidate carries a quantization depends on where it
+      // came from: HF rows carry one picked from the repo's own GGUF files,
+      // ollama.com scrape rows carry none (mapCandidates hardcodes null). So a
+      // fallback here says something about the candidate, not about a backend
+      // failing to report — reported per-row via quantKnown, not as a gap.
       const estimate = estimator.estimate(
         { parameterSizeB: c.parameterSizeB, quantizationLevel: c.quantizationLevel },
         headroom
