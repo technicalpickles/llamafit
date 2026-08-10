@@ -1639,7 +1639,9 @@ nowhere lands in a group labelled 'fits right now'."
 
 ```ts
 export interface Recommendations {
-  /** Largest local row in `comfortable`. */
+  /** Largest local row in the best available fit group (comfortable →
+   * pressured → tight → over-budget), falling back to the first local row if
+   * none of those has one. Null only when there are no local models. */
   runNow: string | null;
   /** A larger local row in `over-budget`, mentioned as the bigger-but-riskier option. */
   runNowBigger: string | null;
@@ -1697,6 +1699,49 @@ it('returns nulls when a side has no qualifying row', async () => {
     worthPulling: null,
   });
 });
+
+it('recommends the best available group when nothing is comfortable', async () => {
+  // A machine under pressure: nothing classifies comfortable, so Run now must
+  // still name something rather than going silent. Requiring 'comfortable'
+  // here would regress aa4a7d0.
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend({
+      localModels: async () => ({
+        models: [
+          { name: 'big:latest', source: 'local', url: null, parameterSizeB: 27, quantizationLevel: 'Q4_K_M', diskSizeBytes: 1 },
+          { name: 'bigger:latest', source: 'local', url: null, parameterSizeB: 30, quantizationLevel: 'Q4_K_M', diskSizeBytes: 1 },
+        ],
+        skipped: [],
+      }),
+      remoteCandidates: async () => ({ candidates: [], sources: [] }),
+    }),
+    probe: fixtureProbe(SYSTEM),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  expect(result.recommendations.runNow).not.toBeNull();
+  expect(result.recommendations.worthPulling).toBeNull();
+});
+
+it('falls back to the first local row when every row is unclassified', async () => {
+  // llama-server reports no size for a model it has never loaded. Benching it
+  // is exactly how it becomes classifiable, so it must still be named.
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend({
+      localModels: async () => ({
+        models: [
+          { name: 'never-loaded:latest', source: 'local', url: null, parameterSizeB: null, quantizationLevel: null, diskSizeBytes: null },
+        ],
+        skipped: [],
+      }),
+      remoteCandidates: async () => ({ candidates: [], sources: [] }),
+    }),
+    probe: fixtureProbe(SYSTEM),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  expect(result.recommendations.runNow).toBe('never-loaded:latest');
+});
 ```
 
 - [ ] **Step 2: Run it and confirm it fails for the right reason**
@@ -1715,6 +1760,15 @@ export interface Recommendations {
   worthPulling: string | null;
 }
 
+/** Fit groups in Run now preference order. Best-available wins; this is not a
+ * filter. See recommend() for why the fallback beyond these matters. */
+const RUN_NOW_PREFERENCE: readonly FitGroup[] = [
+  'comfortable',
+  'pressured',
+  'tight',
+  'over-budget',
+];
+
 /** Computed rather than inferred from sort position, so the recommendation can
  * encode nuance a sort order cannot — notably that the largest model a machine
  * can run right now may be one the conservative budget rejects. */
@@ -1725,7 +1779,15 @@ function recommend(rows: CheckRow[]): Recommendations {
       : candidates.reduce((a, b) => ((b.footprintGb ?? 0) > (a.footprintGb ?? 0) ? b : a));
 
   const local = rows.filter((r) => r.source === 'local');
-  const runNow = biggest(local.filter((r) => r.fit === 'comfortable'));
+  // Preference order, not a filter. Insisting on 'comfortable' would print no
+  // hint at all on a machine whose models are all tight or over-budget, and the
+  // final fallback preserves aa4a7d0: on llama-server a never-loaded model
+  // reports no size, and benching it is exactly how it becomes classifiable, so
+  // declining to name it leaves the user no way forward.
+  const preferred = RUN_NOW_PREFERENCE.map((g) =>
+    biggest(local.filter((r) => r.fit === g))
+  ).find((r) => r !== null);
+  const runNow = preferred ?? local[0] ?? null;
   const overBudget = biggest(local.filter((r) => r.fit === 'over-budget'));
   // Rows arrive pre-sorted by downloads, so the first match is the top-ranked one.
   const worthPulling =
