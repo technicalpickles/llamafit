@@ -163,8 +163,18 @@ describe('remote sources footer', () => {
     expect(formatCheckTable(result)).toContain('huggingface failed: HTTP 429');
   });
 
-  it('omits the line when there are no source reports', () => {
-    expect(formatCheckTable({ ...sampleResult, remoteSources: [] })).not.toContain('Remote sources:');
+  it('renders the PULLABLE header cleanly when there are no source reports (no dangling suffix)', () => {
+    // sourceIds is empty here (remoteSources: []), so the `, ${ids}, by downloads`
+    // suffix must be skipped entirely — not printed with an empty id list, and
+    // not leaving a dangling ", by downloads" or stray trailing comma behind.
+    const out = formatCheckTable({
+      ...sampleResult,
+      rows: [{ ...sampleResult.rows[0], source: 'remote', fit: 'comfortable' }],
+      remoteSources: [],
+    });
+    const header = out.split('\n').find((l) => l.includes('PULLABLE'))!;
+    expect(header).toBe('PULLABLE (1)');
+    expect(out).not.toContain('by downloads');
   });
 });
 
@@ -259,6 +269,54 @@ describe('formatCheckTable sections', () => {
     expect(out).toContain('--local');
     expect(out).toContain('local-0');
     expect(out).not.toContain('local-8');
+  });
+
+  it('derives the overflow range from the hidden rows only, not the whole section', () => {
+    // The largest row (10G) is within the cap and must not leak into the "+N
+    // more" range — the hidden rows are all much smaller (1G), so a range
+    // computed over every row instead of just the hidden ones would wrongly
+    // show 1.0G–10.0G here.
+    const rows = [10, 9, 8, 7, 6, 1].map((size, i) => ({
+      ...sampleResult.rows[0],
+      name: `local-${i}`,
+      footprintGb: size,
+      fit: 'comfortable' as const,
+      baselineVerdict: 'comfortable' as const,
+      currentVerdict: 'comfortable' as const,
+    }));
+    const out = formatCheckTable({ ...sampleResult, rows }, { color: false });
+    const moreLine = out.split('\n').find((l) => l.includes('more'))!;
+    expect(moreLine).toContain('1.0G–1.0G');
+    expect(moreLine).not.toContain('10.0G');
+  });
+
+  it('caps by total rows across groups, not per group', () => {
+    // 3 comfortable + 3 over-budget = 6 rows, each group under SECTION_CAP (5)
+    // on its own. A per-group cap would show all 6 with no overflow line; the
+    // section-wide cap must show exactly 5 and report 1 withheld.
+    const comfortable = Array.from({ length: 3 }, (_, i) => ({
+      ...sampleResult.rows[0],
+      name: `comfortable-${i}`,
+      footprintGb: 8 - i,
+      fit: 'comfortable' as const,
+      baselineVerdict: 'comfortable' as const,
+      currentVerdict: 'comfortable' as const,
+    }));
+    const overBudget = Array.from({ length: 3 }, (_, i) => ({
+      ...sampleResult.rows[0],
+      name: `over-budget-${i}`,
+      footprintGb: 20 - i,
+      fit: 'over-budget' as const,
+      baselineVerdict: 'will-thrash' as const,
+      currentVerdict: 'comfortable' as const,
+    }));
+    const out = formatCheckTable(
+      { ...sampleResult, rows: [...comfortable, ...overBudget] },
+      { color: false }
+    );
+    const shownRows = out.split('\n').filter((l) => /^ {4}(comfortable|over-budget)-\d/.test(l));
+    expect(shownRows).toHaveLength(SECTION_CAP);
+    expect(out).toContain('+1 more');
   });
 
   it('emits no overflow line at exactly the cap', () => {
@@ -405,6 +463,71 @@ describe('formatCheckTable sections', () => {
       { color: false, backendId: 'ollama' }
     );
     expect(out).toContain('llamafit bench gemma3:12b --backend ollama');
+  });
+});
+
+describe('group labels', () => {
+  // comfortable, pressured, and over-budget are already exercised elsewhere
+  // (sampleResult's row is pressured; the recommendation tests hit
+  // over-budget). tight, will-thrash, and unclassified had no coverage at all.
+
+  it("labels 'tight' with the baseline safe-budget figure it's close to", () => {
+    const out = formatCheckTable(
+      {
+        ...sampleResult,
+        rows: [
+          {
+            ...sampleResult.rows[0],
+            baselineVerdict: 'tight',
+            currentVerdict: 'tight',
+            fit: 'tight',
+          },
+        ],
+      },
+      { color: false }
+    );
+    // baselineHeadroomGb is 16 in sampleResult — the label must interpolate it,
+    // not print a static string.
+    expect(out).toContain('tight · close to the 16.0G safe budget');
+  });
+
+  it("labels 'will-thrash' plainly as not fitting — the highest-stakes claim in the table", () => {
+    const out = formatCheckTable(
+      {
+        ...sampleResult,
+        rows: [
+          {
+            ...sampleResult.rows[0],
+            baselineVerdict: 'will-thrash',
+            currentVerdict: 'will-thrash',
+            fit: 'will-thrash',
+          },
+        ],
+      },
+      { color: false }
+    );
+    expect(out).toContain("won't fit");
+  });
+
+  it("labels 'unclassified' as a size the backend didn't report", () => {
+    const out = formatCheckTable(
+      {
+        ...sampleResult,
+        rows: [
+          {
+            ...sampleResult.rows[0],
+            parameterSizeB: null,
+            quantizationLevel: null,
+            footprintGb: null,
+            baselineVerdict: 'unknown',
+            currentVerdict: 'unknown',
+            fit: 'unclassified',
+          },
+        ],
+      },
+      { color: false }
+    );
+    expect(out).toContain("unclassified · backend didn't report a size");
   });
 });
 

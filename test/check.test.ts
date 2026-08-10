@@ -741,6 +741,30 @@ it('recommends the best available group when nothing is comfortable', async () =
   expect(result.recommendations.worthPulling).toBeNull();
 });
 
+it('prefers a classifiable row over an unclassified one when both are present', async () => {
+  // RUN_NOW_PREFERENCE deliberately omits 'unclassified' — a row check couldn't
+  // classify shouldn't win over one it could, even though there's nothing
+  // stopping recommend() from falling through to local[0] the way the
+  // all-unclassified case does below. Order the unclassified row first so a
+  // naive local[0] fallback would wrongly name it if this regressed.
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend({
+      localModels: async () => ({
+        models: [
+          { name: 'unclassified:latest', source: 'local', url: null, parameterSizeB: null, quantizationLevel: null, diskSizeBytes: null },
+          { name: 'classified:latest', source: 'local', url: null, parameterSizeB: 8, quantizationLevel: 'Q4_K_M', diskSizeBytes: 1 },
+        ],
+        skipped: [],
+      }),
+      remoteCandidates: async () => ({ candidates: [], sources: [] }),
+    }),
+    probe: fixtureProbe(fakeSystem),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  expect(result.recommendations.runNow).toBe('classified:latest');
+});
+
 it('falls back to the first local row when every row is unclassified', async () => {
   // llama-server reports no size for a model it has never loaded. Benching it
   // is exactly how it becomes classifiable, so it must still be named.
