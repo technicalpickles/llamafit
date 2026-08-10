@@ -2241,15 +2241,45 @@ function bySizeDesc(a: CheckRow, b: CheckRow): number {
   return b.footprintGb - a.footprintGb;
 }
 
-/** Flattens to display order: group order first, size descending within each.
- * Capping then slices this list, so the cap is defined over the section rather
- * than per group — five rows means five rows, whatever mix of groups. */
-function orderRows(rows: CheckRow[]): CheckRow[] {
-  return GROUP_ORDER.flatMap((g) => rows.filter((r) => r.fit === g).sort(bySizeDesc));
+/** Downloads descending, nulls last. Same comparator shape as check.ts's remote
+ * ranking, applied within a group so the section's stated order survives the
+ * grouping. */
+function byDownloadsDesc(a: CheckRow, b: CheckRow): number {
+  return (b.signals?.downloads ?? -1) - (a.signals?.downloads ?? -1);
+}
+
+/** Flattens to display order: group order first, then the section's own ranking
+ * axis within each group. Capping slices this list, so the cap is defined over
+ * the section rather than per group — five rows means five rows, whatever mix of
+ * groups.
+ *
+ * The comparator is a parameter, not a constant: PULLED ranks by footprint
+ * (biggest thing that fits first), PULLABLE by downloads. Hardcoding
+ * bySizeDesc for both made the PULLABLE header read "by downloads" while the
+ * rows were size-ordered — the 4.6M-download pick landed third in its own list. */
+function orderRows(
+  rows: CheckRow[],
+  within: (a: CheckRow, b: CheckRow) => number
+): CheckRow[] {
+  return GROUP_ORDER.flatMap((g) => rows.filter((r) => r.fit === g).sort(within));
+}
+
+/** Collapsed sibling tags render as just their tag (`:latest`), never the whole
+ * repeated name. Sharing a digest means the base name is identical by
+ * definition, so repeating it is pure noise — and because column widths span
+ * the section, one long HF repo name rendered twice padded every other row in
+ * PULLED out past 170 columns. */
+function siblingTags(alsoTagged: string[] | undefined): string {
+  if (!alsoTagged?.length) return '';
+  const shown = alsoTagged.map((name) => {
+    const { tag } = splitModelTag(name);
+    return tag === null ? name : `:${tag}`;
+  });
+  return ` (${shown.join(', ')})`;
 }
 
 function cells(r: CheckRow, withDownloads: boolean): string[] {
-  const tags = r.alsoTagged?.length ? ` (${r.alsoTagged.join(', ')})` : '';
+  const tags = siblingTags(r.alsoTagged);
   const measured = r.estimateSource === 'measured';
   const raw = r.footprintGb !== null ? `${r.footprintGb.toFixed(1)}G` : '?';
   const out = [
@@ -2273,6 +2303,9 @@ function renderSection(
     flag: string;
     emptyMessage: string;
     withDownloads: boolean;
+    /** Ranking axis within each fit group — footprint for PULLED, downloads for
+     * PULLABLE. See orderRows(). */
+    within: (a: CheckRow, b: CheckRow) => number;
     suffix?: string;
   }
 ): string[] {
@@ -2280,7 +2313,7 @@ function renderSection(
     return [label(`${title} (0)`, o.color), `  ${dim(o.emptyMessage, o.color)}`];
   }
 
-  const ordered = orderRows(rows);
+  const ordered = orderRows(rows, o.within);
   const shown = o.expanded ? ordered : ordered.slice(0, SECTION_CAP);
   const hidden = ordered.length - shown.length;
 
@@ -2375,6 +2408,7 @@ export function formatCheckTable(result: CheckResult, opts: FormatOptions = {}):
       flag: '--local',
       emptyMessage: 'No models pulled yet.',
       withDownloads: false,
+      within: bySizeDesc,
     })
   );
 
@@ -2387,6 +2421,7 @@ export function formatCheckTable(result: CheckResult, opts: FormatOptions = {}):
       flag: '--remote',
       emptyMessage: 'No remote candidates found.',
       withDownloads: true,
+      within: byDownloadsDesc,
       suffix: sourceIds.length > 0 ? `${sourceIds.join(' + ')}, by downloads` : undefined,
     })
   );
@@ -2397,7 +2432,7 @@ export function formatCheckTable(result: CheckResult, opts: FormatOptions = {}):
     legend.push('~ = estimated from parameter count and quantization (model not currently loaded)');
   }
   if (result.rows.some((r) => !r.quantKnown && r.quantizationLevel !== null)) {
-    legend.push('? after QUANT = quantization not reported; assumed for the estimate');
+    legend.push('? after a quantization = not reported by the backend; assumed for the estimate');
   }
   if (result.rows.some((r) => r.parameterSizeB === null)) {
     legend.push(
