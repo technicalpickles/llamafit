@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { formatCheckTable, formatCheckJson, formatPullProgress } from '../src/format.js';
-import type { CheckResult } from '../src/check.js';
+import type { CheckResult, CheckRow } from '../src/check.js';
 import { formatBenchResult } from '../src/format.js';
 import type { BenchResult } from '../src/bench.js';
 import type { PullProgress } from '../src/backends/types.js';
@@ -70,7 +70,7 @@ describe('formatCheckTable', () => {
     const row = table.split('\n').find((l) => l.includes('pd95/gptoss-mlx'))!;
     expect(row).toContain('~14.1'); // estimated, not measured
     expect(row).toContain('Q4_K_M?'); // quantization was assumed
-    expect(table).toContain('quantization not reported');
+    expect(table).toContain('not reported by the backend');
   });
 
   it('explains the bare "?" with a legend when a local model has no reported size (e.g. an unloaded llama-server model)', () => {
@@ -289,15 +289,71 @@ describe('formatCheckTable sections', () => {
     expect(out).not.toContain('more');
   });
 
-  it('shows collapsed tags inline', () => {
+  it('shows a collapsed sibling as just its tag, not the repeated base name', () => {
     const out = formatCheckTable(
       {
         ...sampleResult,
-        rows: [{ ...sampleResult.rows[0], alsoTagged: ['gemma3:latest'] }],
+        rows: [{ ...sampleResult.rows[0], name: 'gemma3:12b', alsoTagged: ['gemma3:latest'] }],
       },
       { color: false }
     );
-    expect(out).toContain('gemma3:latest');
+    expect(out).toContain(':latest');
+    expect(out).not.toContain('gemma3:latest');
+  });
+
+  it('never repeats a long collapsed name — only its tag, however long the base is', () => {
+    // Regression for the guardrail defect: a shared HF repo name rendered twice
+    // (once as the row's own name, once inside the sibling-tag parens) padded
+    // every other row in the section out past 170 columns.
+    const longName = 'hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF';
+    const out = formatCheckTable(
+      {
+        ...sampleResult,
+        rows: [
+          {
+            ...sampleResult.rows[0],
+            name: `${longName}:Q4_K_M`,
+            alsoTagged: [`${longName}:latest`],
+          },
+        ],
+      },
+      { color: false }
+    );
+    const occurrences = out.split(longName).length - 1;
+    expect(occurrences).toBe(1);
+    expect(out).toContain(':latest');
+  });
+
+  it('ranks PULLABLE rows by downloads, not footprint size', () => {
+    // Sized so bySizeDesc and byDownloadsDesc disagree completely — this must
+    // fail if orderRows falls back to sorting PULLABLE by footprint.
+    const base = { ...sampleResult.rows[0], source: 'remote' as const, fit: 'comfortable' as const };
+    const rows: CheckRow[] = [
+      {
+        ...base,
+        name: 'big-but-unpopular',
+        footprintGb: 10,
+        signals: { downloads: 100, likes: 0, trendingScore: 0, lastModified: null },
+      },
+      {
+        ...base,
+        name: 'mid-mid',
+        footprintGb: 5,
+        signals: { downloads: 500_000, likes: 0, trendingScore: 0, lastModified: null },
+      },
+      {
+        ...base,
+        name: 'small-but-popular',
+        footprintGb: 2,
+        signals: { downloads: 5_000_000, likes: 0, trendingScore: 0, lastModified: null },
+      },
+    ];
+    const out = formatCheckTable({ ...sampleResult, rows }, { color: false });
+    const order = out
+      .split('\n')
+      .filter((l) => l.includes(' dl'))
+      .map((l) => l.trim().split(/\s{2,}/)[0]);
+    expect(order).toEqual(['small-but-popular', 'mid-mid', 'big-but-unpopular']);
   });
 
   it('renders both recommendation lines when both sides qualify', () => {
