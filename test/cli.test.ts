@@ -37,6 +37,16 @@ describe('createProgram subcommands', () => {
     expect(optionNames).toContain('--diagnose');
   });
 
+  it('registers the check section-expand options under the names the overflow line prints', () => {
+    const program = createProgram();
+    const check = program.commands.find((c) => c.name() === 'check');
+    expect(check).toBeDefined();
+    const optionNames = check!.options.map((o) => o.long);
+    expect(optionNames).toContain('--local');
+    expect(optionNames).toContain('--remote');
+    expect(optionNames).toContain('--all');
+  });
+
   it('registers a bench command requiring a model argument', () => {
     const program = createProgram();
     const bench = program.commands.find((c) => c.name() === 'bench');
@@ -240,6 +250,27 @@ describe('check command wiring', () => {
     expect(h.stderr.join('\n')).toContain('--all');
     expect(h.exit.code).toBe(1);
     expect(h.stdout).toEqual([]);
+  });
+
+  it('accepts --local --remote --all: the flag the error tells you to use must work', async () => {
+    // The mutual-exclusion guard used to fire even when --all was present, so
+    // `check --local --remote --all` told the reader to use the very flag they
+    // had just passed. --all already means both sections, so it settles it.
+    const backend = fixtureBackend({ localModels: manyLocalModels(8) });
+    const h = harness({
+      detectBackends: async () => [
+        { backend, detection: { detected: true, version: '0.0.0', evidence: {} } },
+      ],
+    });
+
+    await runCheckCommand({ ...CHECK_OPTS, local: true, remote: true, all: true }, h.deps);
+
+    expect(h.stderr).toEqual([]);
+    expect(h.exit.code).toBe(0);
+    const out = h.stdout.join('\n');
+    expect(out).toContain('PULLED');
+    expect(out).toContain('PULLABLE');
+    expect(out).not.toMatch(/\+\d+ more/);
   });
 
   it('--all alongside --json leaves the JSON output unchanged', async () => {

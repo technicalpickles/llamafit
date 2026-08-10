@@ -329,7 +329,11 @@ async function checkCommand(opts: CheckCommandOptions, deps: CliDeps): Promise<v
   // this one", so asking for both is asking for --all. Say that rather than
   // silently picking one. Checked before resolve() so a flag conflict fails
   // fast without probing backends over the network.
-  if (opts.local && opts.remote) {
+  //
+  // Unless --all is already there: the error names --all as the fix, so firing
+  // it on `--local --remote --all` would tell the reader to use the flag they
+  // just used. --all subsumes both, so there is nothing left to disambiguate.
+  if (opts.local && opts.remote && !opts.all) {
     deps.stderr(
       error(`${label('Error:', color)} use --all to expand both sections`, color)
     );
