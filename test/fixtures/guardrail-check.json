@@ -88,34 +88,6 @@
       "discoverySource": "huggingface"
     },
     {
-      "name": "hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF",
-      "source": "remote",
-      "url": "https://huggingface.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF",
-      "parameterSizeB": 11.907350576,
-      "quantizationLevel": "Q4_K_M",
-      "footprintGb": 8.372355873750001,
-      "estimateSource": "estimated",
-      "quantKnown": true,
-      "baselineVerdict": "comfortable",
-      "currentVerdict": "comfortable",
-      "author": "yuxinlu1",
-      "availableQuants": [
-        "BF16",
-        "F16",
-        "Q8_0",
-        "Q3_K_M",
-        "Q4_K_M",
-        "Q6_K"
-      ],
-      "signals": {
-        "downloads": 355480,
-        "likes": 1392,
-        "trendingScore": 35,
-        "lastModified": "2026-06-19T09:31:48.000Z"
-      },
-      "discoverySource": "huggingface"
-    },
-    {
       "name": "hf.co/yuxinlu1/gemma-4-12B-coder-fable5-composer2.5-v1-GGUF",
       "source": "remote",
       "url": "https://huggingface.co/yuxinlu1/gemma-4-12B-coder-fable5-composer2.5-v1-GGUF",
@@ -339,19 +311,6 @@
       "discoverySource": "huggingface"
     },
     {
-      "name": "mxbai-embed-large",
-      "source": "remote",
-      "url": "https://ollama.com/library/mxbai-embed-large",
-      "parameterSizeB": 0.335,
-      "quantizationLevel": "Q4_K_M",
-      "footprintGb": 0.23554687500000002,
-      "estimateSource": "estimated",
-      "quantKnown": false,
-      "baselineVerdict": "comfortable",
-      "currentVerdict": "comfortable",
-      "discoverySource": "ollama.com"
-    },
-    {
       "name": "mistrallite",
       "source": "remote",
       "url": "https://ollama.com/library/mistrallite",
@@ -430,19 +389,6 @@
       "discoverySource": "ollama.com"
     },
     {
-      "name": "cyborgxx101/gemma-4-12b-opus-finetuned-mlx",
-      "source": "remote",
-      "url": "https://ollama.com/cyborgxx101/gemma-4-12b-opus-finetuned-mlx",
-      "parameterSizeB": 12,
-      "quantizationLevel": "Q4_K_M",
-      "footprintGb": 8.4375,
-      "estimateSource": "estimated",
-      "quantKnown": false,
-      "baselineVerdict": "comfortable",
-      "currentVerdict": "comfortable",
-      "discoverySource": "ollama.com"
-    },
-    {
       "name": "charaf/qwen3.6-35b-a3b-coding-nvfp4-mlx",
       "source": "remote",
       "url": "https://ollama.com/charaf/qwen3.6-35b-a3b-coding-nvfp4-mlx",
@@ -505,19 +451,6 @@
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
       "currentVerdict": "will-thrash",
-      "discoverySource": "ollama.com"
-    },
-    {
-      "name": "charaf/qwen3-embedding-8b-mlx-mxfp8",
-      "source": "remote",
-      "url": "https://ollama.com/charaf/qwen3-embedding-8b-mlx-mxfp8",
-      "parameterSizeB": 8,
-      "quantizationLevel": "Q4_K_M",
-      "footprintGb": 5.625,
-      "estimateSource": "estimated",
-      "quantKnown": false,
-      "baselineVerdict": "comfortable",
-      "currentVerdict": "comfortable",
       "discoverySource": "ollama.com"
     },
     {

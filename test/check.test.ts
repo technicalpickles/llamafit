@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { runCheck, type CheckDeps } from '../src/check.js';
+import { runCheck, untagged, isNonChat, type CheckDeps } from '../src/check.js';
 import type { OllamaTagsResponse } from '../src/backends/ollama/client.js';
 import type { ModelInfo } from '../src/types.js';
 import type { SystemMemoryState } from '../src/probes/types.js';
@@ -538,5 +538,84 @@ describe('remote discovery reporting', () => {
     expect(remote.every((r) => r.discoverySource === 'ollama.com' || r.discoverySource === 'huggingface')).toBe(
       true
     );
+  });
+
+  it('drops a remote candidate that is already pulled locally', async () => {
+    const result = await runCheck('mlx', {
+      backend: fixtureBackend({
+        localModels: async () => ({
+          models: [
+            { name: 'hf.co/o/r:Q4_K_M', source: 'local', url: null, parameterSizeB: 8, quantizationLevel: 'Q4_K_M', diskSizeBytes: 1 },
+          ],
+          skipped: [],
+        }),
+        remoteCandidates: async () => ({
+          candidates: [
+            { name: 'hf.co/o/r', source: 'remote', url: null, parameterSizeB: 8, quantizationLevel: 'Q4_K_M', diskSizeBytes: null },
+            { name: 'hf.co/other/repo', source: 'remote', url: null, parameterSizeB: 8, quantizationLevel: 'Q4_K_M', diskSizeBytes: null },
+          ],
+          sources: [{ id: 'huggingface', query: '', ok: true }],
+        }),
+      }),
+      probe: fixtureProbe(fakeSystem),
+      estimator: formulaEstimator,
+      gaps: new GapCollector(),
+    });
+
+    const remote = result.rows.filter((r) => r.source === 'remote').map((r) => r.name);
+    expect(remote).toEqual(['hf.co/other/repo']);
+  });
+
+  it('never filters a local model, even one that looks like an embedding model', async () => {
+    const result = await runCheck('mlx', {
+      backend: fixtureBackend({
+        localModels: async () => ({
+          models: [
+            { name: 'mxbai-embed-large', source: 'local', url: null, parameterSizeB: 0.3, quantizationLevel: 'Q4_K_M', diskSizeBytes: 1 },
+          ],
+          skipped: [],
+        }),
+        remoteCandidates: async () => ({
+          candidates: [
+            { name: 'some/other-embed-model', source: 'remote', url: null, parameterSizeB: 1, quantizationLevel: 'Q4_K_M', diskSizeBytes: null },
+          ],
+          sources: [{ id: 'huggingface', query: '', ok: true }],
+        }),
+      }),
+      probe: fixtureProbe(fakeSystem),
+      estimator: formulaEstimator,
+      gaps: new GapCollector(),
+    });
+
+    expect(result.rows.map((r) => r.name)).toEqual(['mxbai-embed-large']);
+  });
+});
+
+describe('untagged', () => {
+  it('strips an Ollama tag', () => {
+    expect(untagged('gemma3:12b')).toBe('gemma3');
+    expect(untagged('hf.co/o/r:Q4_K_M')).toBe('hf.co/o/r');
+  });
+
+  it('leaves a name with no tag alone', () => {
+    expect(untagged('mistrallite')).toBe('mistrallite');
+    expect(untagged('hf.co/o/r')).toBe('hf.co/o/r');
+  });
+
+  it('does not mistake a namespace colon for a tag', () => {
+    expect(untagged('hf.co/owner:weird/repo')).toBe('hf.co/owner:weird/repo');
+  });
+});
+
+describe('isNonChat', () => {
+  it('flags embedding and reranker models', () => {
+    expect(isNonChat('mxbai-embed-large')).toBe(true);
+    expect(isNonChat('charaf/qwen3-embedding-8b-mlx-mxfp8')).toBe(true);
+    expect(isNonChat('BAAI/bge-reranker-v2-m3')).toBe(true);
+  });
+
+  it('does not flag ordinary chat models', () => {
+    expect(isNonChat('gemma3:12b')).toBe(false);
+    expect(isNonChat('ornith-ai/Ornith-1.0-9B-GGUF')).toBe(false);
   });
 });

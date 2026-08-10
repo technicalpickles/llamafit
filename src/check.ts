@@ -7,6 +7,23 @@ import { classifyVerdict, maxCandidateParamsB } from './estimators/formula.js';
 import type { GapCollector } from './gaps.js';
 import { loadThresholds } from './data.js';
 import { REMOTE_GUIDANCE } from './hf/guidance.js';
+import { splitModelTag } from './model-names.js';
+
+/** Same tag rule as quantFromTag, via the same helper — one is asking what the
+ * tag says, the other is asking what the name is without it. */
+export function untagged(name: string): string {
+  return splitModelTag(name).base;
+}
+
+/** Embedding and reranking models are not what "which model should I run"
+ * means, and HF's pipeline_tag filter doesn't cover the ollama.com scrape.
+ * Applied to candidates only — a user's own pulled model is theirs to see
+ * regardless of what we think it's for. */
+const NON_CHAT_PATTERNS: readonly RegExp[] = [/embed/i, /rerank/i];
+
+export function isNonChat(name: string): boolean {
+  return NON_CHAT_PATTERNS.some((re) => re.test(name));
+}
 
 export interface CheckRow {
   name: string;
@@ -177,8 +194,11 @@ export async function runCheck(query: string | undefined, deps: CheckDeps): Prom
     };
   });
 
+  const localNames = new Set(localRows.map((r) => untagged(r.name)));
   const remoteRows: CheckRow[] = remoteCandidates
     .filter((c) => c.parameterSizeB !== null)
+    .filter((c) => !localNames.has(untagged(c.name)))
+    .filter((c) => !isNonChat(c.name))
     .map((c) => {
       // Remote candidates never carry a quantization — the fallback is expected here,
       // so it is reported per-row via quantKnown rather than as a gap.

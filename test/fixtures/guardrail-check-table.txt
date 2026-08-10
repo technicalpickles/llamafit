@@ -5,7 +5,6 @@ gemma3:27b                                                                      
 llama3.2:3b                                                                        local   3.2        Q4_K_M   ~2.3           comfortable  comfortable
 hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:Q4_K_M     local   11.9       Q4_K_M   ~8.4           comfortable  comfortable
 hf.co/ornith-ai/Ornith-1.0-9B-GGUF                                                 remote  9.0        Q4_K_M   ~6.3           comfortable  comfortable
-hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF            remote  11.9       Q4_K_M   ~8.4           comfortable  comfortable
 hf.co/yuxinlu1/gemma-4-12B-coder-fable5-composer2.5-v1-GGUF                        remote  11.9       Q4_K_M   ~8.4           comfortable  comfortable
 hf.co/RavichandranJ/Dolphin3-Cyber-8B-GGUF                                         remote  8.0        Q4_K_M   ~5.6           comfortable  comfortable
 hf.co/LiquidAI/LFM2.5-8B-A1B-GGUF                                                  remote  8.5        Q4_K_M   ~6.0           comfortable  comfortable
@@ -14,20 +13,17 @@ hf.co/LiquidAI/LFM2.5-2.6B-GGUF                                                 
 hf.co/fraQtl/Gemma-4-E2B-it-Hi-Fi-GGUF                                             remote  4.6        Q4_K_M   ~3.3           comfortable  comfortable
 hf.co/KBlueLeaf/TIPOv2-1B-A200M                                                    remote  1.0        Q8_0     ~1.3           comfortable  comfortable
 hf.co/SupraLabs/Supra2-100M-Instruct                                               remote  0.1        F16      ~0.3           comfortable  comfortable
-mxbai-embed-large                                                                  remote  0.3        Q4_K_M?  ~0.2           comfortable  comfortable
 mistrallite                                                                        remote  7.0        Q4_K_M?  ~4.9           comfortable  comfortable
 oamazonasgabriel/qwen2.5-coder.1.5b-mlx                                            remote  1.5        Q4_K_M?  ~1.1           comfortable  comfortable
 rafw007/Qwen3.6-35B-A3B-mlx-claude-coder-abliterated                               remote  35.0       Q4_K_M?  ~24.6          will-thrash  will-thrash
 charaf/Huihui-Qwen3.6-35B-A3B-abliterated-mlx                                      remote  35.0       Q4_K_M?  ~24.6          will-thrash  will-thrash
 charaf/Huihui-Qwen3.6-27B-abliterated-mlx-nvfp4                                    remote  27.0       Q4_K_M?  ~19.0          will-thrash  tight      
 aratan/qwen3.6-claude-coder-35b-A3b-mlx-Q4KM-abliterated                           remote  35.0       Q4_K_M?  ~24.6          will-thrash  will-thrash
-cyborgxx101/gemma-4-12b-opus-finetuned-mlx                                         remote  12.0       Q4_K_M?  ~8.4           comfortable  comfortable
 charaf/qwen3.6-35b-a3b-coding-nvfp4-mlx                                            remote  35.0       Q4_K_M?  ~24.6          will-thrash  will-thrash
 charaf/Qwen3.6-27B-OBLITERATED-mlx-mxfp4                                           remote  27.0       Q4_K_M?  ~19.0          will-thrash  tight      
 charaf/Qwen3.6-27B-OBLITERATED-mlx-q8                                              remote  27.0       Q4_K_M?  ~19.0          will-thrash  tight      
 pd95/gptoss-mlx                                                                    remote  20.0       Q4_K_M?  ~14.1          tight        comfortable
 charaf/qwen3.6-35b-a3b-coding-nvfp4-mlx-latest-latest-latest-latest-latest-latest  remote  35.0       Q4_K_M?  ~24.6          will-thrash  will-thrash
-charaf/qwen3-embedding-8b-mlx-mxfp8                                                remote  8.0        Q4_K_M?  ~5.6           comfortable  comfortable
 CogiArt/qwen3-mlx                                                                  remote  8.0        Q4_K_M?  ~5.6           comfortable  comfortable
 pd95/apertus-mlx                                                                   remote  8.0        Q4_K_M?  ~5.6           comfortable  comfortable
 
@@ -36,7 +32,6 @@ pd95/apertus-mlx                                                                
 
 Remote model links:
   hf.co/ornith-ai/Ornith-1.0-9B-GGUF → https://huggingface.co/ornith-ai/Ornith-1.0-9B-GGUF (quants: Q4_K_M, Q5_K_M, Q6_K, Q8_0, +1 more)
-  hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF → https://huggingface.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF (quants: BF16, F16, Q8_0, Q3_K_M, +2 more)
   hf.co/yuxinlu1/gemma-4-12B-coder-fable5-composer2.5-v1-GGUF → https://huggingface.co/yuxinlu1/gemma-4-12B-coder-fable5-composer2.5-v1-GGUF (quants: Q2_K, Q3_K_M, Q4_K_M, Q6_K, +1 more)
   hf.co/RavichandranJ/Dolphin3-Cyber-8B-GGUF → https://huggingface.co/RavichandranJ/Dolphin3-Cyber-8B-GGUF (quants: F16, Q2_K, Q3_K_M, Q4_0, +7 more)
   hf.co/LiquidAI/LFM2.5-8B-A1B-GGUF → https://huggingface.co/LiquidAI/LFM2.5-8B-A1B-GGUF (quants: BF16, F16, Q4_0, Q4_K_M, +3 more)
@@ -45,20 +40,17 @@ Remote model links:
   hf.co/fraQtl/Gemma-4-E2B-it-Hi-Fi-GGUF → https://huggingface.co/fraQtl/Gemma-4-E2B-it-Hi-Fi-GGUF (quants: Q4_K_M, IQ3XXS)
   hf.co/KBlueLeaf/TIPOv2-1B-A200M → https://huggingface.co/KBlueLeaf/TIPOv2-1B-A200M (quants: F16, Q8_0)
   hf.co/SupraLabs/Supra2-100M-Instruct → https://huggingface.co/SupraLabs/Supra2-100M-Instruct (quants: F16)
-  mxbai-embed-large → https://ollama.com/library/mxbai-embed-large
   mistrallite → https://ollama.com/library/mistrallite
   oamazonasgabriel/qwen2.5-coder.1.5b-mlx → https://ollama.com/oamazonasgabriel/qwen2.5-coder.1.5b-mlx
   rafw007/Qwen3.6-35B-A3B-mlx-claude-coder-abliterated → https://ollama.com/rafw007/Qwen3.6-35B-A3B-mlx-claude-coder-abliterated
   charaf/Huihui-Qwen3.6-35B-A3B-abliterated-mlx → https://ollama.com/charaf/Huihui-Qwen3.6-35B-A3B-abliterated-mlx
   charaf/Huihui-Qwen3.6-27B-abliterated-mlx-nvfp4 → https://ollama.com/charaf/Huihui-Qwen3.6-27B-abliterated-mlx-nvfp4
   aratan/qwen3.6-claude-coder-35b-A3b-mlx-Q4KM-abliterated → https://ollama.com/aratan/qwen3.6-claude-coder-35b-A3b-mlx-Q4KM-abliterated
-  cyborgxx101/gemma-4-12b-opus-finetuned-mlx → https://ollama.com/cyborgxx101/gemma-4-12b-opus-finetuned-mlx
   charaf/qwen3.6-35b-a3b-coding-nvfp4-mlx → https://ollama.com/charaf/qwen3.6-35b-a3b-coding-nvfp4-mlx
   charaf/Qwen3.6-27B-OBLITERATED-mlx-mxfp4 → https://ollama.com/charaf/Qwen3.6-27B-OBLITERATED-mlx-mxfp4
   charaf/Qwen3.6-27B-OBLITERATED-mlx-q8 → https://ollama.com/charaf/Qwen3.6-27B-OBLITERATED-mlx-q8
   pd95/gptoss-mlx → https://ollama.com/pd95/gptoss-mlx
   charaf/qwen3.6-35b-a3b-coding-nvfp4-mlx-latest-latest-latest-latest-latest-latest → https://ollama.com/charaf/qwen3.6-35b-a3b-coding-nvfp4-mlx-latest-latest-latest-latest-latest-latest
-  charaf/qwen3-embedding-8b-mlx-mxfp8 → https://ollama.com/charaf/qwen3-embedding-8b-mlx-mxfp8
   CogiArt/qwen3-mlx → https://ollama.com/CogiArt/qwen3-mlx
   pd95/apertus-mlx → https://ollama.com/pd95/apertus-mlx
 
