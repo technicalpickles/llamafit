@@ -116,14 +116,38 @@ describe('ollamaBackend mapping', () => {
     expect(detection.evidence).toHaveProperty('baseUrl');
   });
 
-  it('remoteCandidates defaults the scrape query to mlx and reports the source', async () => {
+  it('remoteCandidates defaults the scrape query to empty and reports the source', async () => {
     const discovery = await ollamaBackend.remoteCandidates!();
-    expect(discovery.sources).toContainEqual({ id: 'ollama.com', query: 'mlx', ok: true });
+    expect(discovery.sources).toContainEqual({ id: 'ollama.com', query: '', ok: true });
     expect(discovery.candidates.length).toBeGreaterThan(0);
     // Two sources now (ollama-hf-source) — assert the scrape rows are present
     // and correctly attributed, not that they're the only rows.
     expect(discovery.candidates.some((c) => c.discoverySource === 'ollama.com')).toBe(true);
-    expect(requestedSearchUrl).toContain('q=mlx');
+    expect(requestedSearchUrl).toContain('q=');
+    expect(requestedSearchUrl).not.toContain('q=mlx');
+  });
+
+  it('defaults both sources to an empty query when none is given', async () => {
+    const calls: string[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.includes('ollama.com')) {
+        return new Response('<html></html>', { status: 200 });
+      }
+      return new Response('[]', { status: 200 });
+    }) as typeof fetch;
+
+    try {
+      const discovery = await ollamaBackend.remoteCandidates!(undefined, {});
+      expect(discovery.sources.map((s) => s.query)).toEqual(['', '']);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(calls.some((u) => u.includes('q=mlx'))).toBe(false);
+    expect(calls.some((u) => u.includes('search=mlx'))).toBe(false);
   });
 
   it('remoteCandidates reports a failed source instead of throwing', async () => {
@@ -258,11 +282,11 @@ describe('ollamaBackend remoteCandidates (two sources)', () => {
     expect(sources.map((s) => s.id)).toEqual(['ollama.com', 'huggingface']);
   });
 
-  it('routes per-source defaults when no query is given', async () => {
+  it('routes an empty default to both sources when no query is given', async () => {
     await ollamaBackend.remoteCandidates!();
     const scrapeUrl = fetched.find((u) => u.includes('ollama.com/search'));
     const hfUrl = fetched.find((u) => u.includes('huggingface.co/api/models'));
-    expect(scrapeUrl).toContain('q=mlx');
+    expect(scrapeUrl).not.toContain('q=mlx');
     expect(hfUrl).not.toContain('search=');
   });
 

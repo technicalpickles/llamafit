@@ -145,10 +145,6 @@ async function localModels(): Promise<LocalModels> {
   return mapTagsToLocalModels(tags);
 }
 
-/** ollama.com's historical search default, applied when the user gave no query.
- * The HF source defaults to '' — bare trending, matching llama-server. */
-const SCRAPE_DEFAULT_QUERY = 'mlx';
-
 /** ollama pulls HF repos as `ollama pull hf.co/<owner>/<repo>[:<quant>]`; the
  * quant tag is the caller's pick from availableQuants. */
 function hfPullName(c: HfCandidate): string {
@@ -159,7 +155,12 @@ async function remoteCandidates(
   query?: string,
   opts: RemoteCandidateOptions = {}
 ): Promise<RemoteDiscovery> {
-  const scrapeQuery = query ?? SCRAPE_DEFAULT_QUERY;
+  // No query means "show me what's relevant and fits", not "filter to one
+  // arbitrary slice". A hardcoded default query is a filter: 'mlx' used to
+  // live here and selected four 35B and three 27B models against a 16GB
+  // budget, plus whatever reuploaders had appended the tag. MLX-tagged models
+  // are ordinary GGUFs and still appear when they rank well or via --query.
+  const scrapeQuery = query ?? '';
   const hfQuery = query ?? '';
   // allSettled: the sources fail independently — one being down must not
   // blank the other's rows.
