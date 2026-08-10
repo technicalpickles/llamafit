@@ -25,6 +25,37 @@ export function isNonChat(name: string): boolean {
   return NON_CHAT_PATTERNS.some((re) => re.test(name));
 }
 
+export type FitGroup =
+  | 'comfortable'
+  | 'pressured'
+  | 'tight'
+  | 'over-budget'
+  | 'will-thrash'
+  | 'unclassified';
+
+const SEVERITY: Record<Verdict, number> = { comfortable: 0, tight: 1, 'will-thrash': 2 };
+
+/** Collapses the baseline/current verdict pair into one group. Baseline is the
+ * grouping axis because it is the conservative, trustworthy figure; the two
+ * derived groups carry the disagreement.
+ *
+ * The `over-budget` branch must test that current is *strictly* better than
+ * will-thrash. Testing only `baseline === 'will-thrash'` would send
+ * (will-thrash, will-thrash) — a model that fits nowhere — into a group
+ * labelled "fits right now", since equal severities don't trip `pressured`. */
+export function fitGroup(
+  baseline: Verdict | 'unknown',
+  current: Verdict | 'unknown'
+): FitGroup {
+  if (baseline === 'unknown') return 'unclassified';
+  if (current === 'unknown') return baseline;
+  if (SEVERITY[current] > SEVERITY[baseline]) return 'pressured';
+  if (baseline === 'will-thrash' && SEVERITY[current] < SEVERITY['will-thrash']) {
+    return 'over-budget';
+  }
+  return baseline;
+}
+
 export interface CheckRow {
   name: string;
   source: 'local' | 'remote';
@@ -39,6 +70,13 @@ export interface CheckRow {
   quantKnown: boolean;
   baselineVerdict: Verdict | 'unknown';
   currentVerdict: Verdict | 'unknown';
+  /** Derived from baselineVerdict + currentVerdict; see fitGroup(). Additive —
+   * both raw verdicts stay on the row for --json consumers. */
+  fit: FitGroup;
+  /** Other tags pointing at the same weights, collapsed by the backend. Absent
+   * when there are none, so --json output stays byte-identical for single-tag
+   * models. Display-only — the collapse decision already happened upstream. */
+  alsoTagged?: string[];
   author?: string | null;
   availableQuants?: string[];
   signals?: RemoteSignals | null;
@@ -136,6 +174,8 @@ export async function runCheck(query: string | undefined, deps: CheckDeps): Prom
     // formula every time — no reason to estimate something the backend already measured.
     const measured = running.get(model.name);
     if (measured) {
+      const baselineVerdict = classifyVerdict(measured.sizeVramGb, baselineHeadroomGb);
+      const currentVerdict = classifyVerdict(measured.sizeVramGb, currentHeadroomGb);
       return {
         name: model.name,
         source: 'local',
@@ -145,8 +185,10 @@ export async function runCheck(query: string | undefined, deps: CheckDeps): Prom
         footprintGb: measured.sizeVramGb,
         estimateSource: 'measured',
         quantKnown: true,
-        baselineVerdict: classifyVerdict(measured.sizeVramGb, baselineHeadroomGb),
-        currentVerdict: classifyVerdict(measured.sizeVramGb, currentHeadroomGb),
+        baselineVerdict,
+        currentVerdict,
+        fit: fitGroup(baselineVerdict, currentVerdict),
+        ...(model.alsoTagged !== undefined ? { alsoTagged: model.alsoTagged } : {}),
       };
     }
 
@@ -164,6 +206,8 @@ export async function runCheck(query: string | undefined, deps: CheckDeps): Prom
         quantKnown: false,
         baselineVerdict: 'unknown',
         currentVerdict: 'unknown',
+        fit: 'unclassified',
+        ...(model.alsoTagged !== undefined ? { alsoTagged: model.alsoTagged } : {}),
       };
     }
 
@@ -191,6 +235,8 @@ export async function runCheck(query: string | undefined, deps: CheckDeps): Prom
       quantKnown: estimate.quantKnown,
       baselineVerdict: estimate.baselineVerdict,
       currentVerdict: estimate.currentVerdict,
+      fit: fitGroup(estimate.baselineVerdict, estimate.currentVerdict),
+      ...(model.alsoTagged !== undefined ? { alsoTagged: model.alsoTagged } : {}),
     };
   });
 
@@ -218,6 +264,7 @@ export async function runCheck(query: string | undefined, deps: CheckDeps): Prom
         quantKnown: estimate.quantKnown,
         baselineVerdict: estimate.baselineVerdict,
         currentVerdict: estimate.currentVerdict,
+        fit: fitGroup(estimate.baselineVerdict, estimate.currentVerdict),
         ...(c.author !== undefined ? { author: c.author } : {}),
         ...(c.availableQuants !== undefined ? { availableQuants: c.availableQuants } : {}),
         ...(c.signals !== undefined ? { signals: c.signals } : {}),

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { runCheck, untagged, isNonChat, type CheckDeps } from '../src/check.js';
+import { runCheck, untagged, isNonChat, fitGroup, type CheckDeps } from '../src/check.js';
 import type { OllamaTagsResponse } from '../src/backends/ollama/client.js';
 import type { ModelInfo } from '../src/types.js';
 import type { SystemMemoryState } from '../src/probes/types.js';
@@ -589,6 +589,79 @@ describe('remote discovery reporting', () => {
 
     expect(result.rows.map((r) => r.name)).toEqual(['mxbai-embed-large']);
   });
+});
+
+describe('fitGroup', () => {
+  it('groups agreement under the shared verdict', () => {
+    expect(fitGroup('comfortable', 'comfortable')).toBe('comfortable');
+    expect(fitGroup('tight', 'tight')).toBe('tight');
+  });
+
+  it('reports pressured when right-now is worse than the baseline budget', () => {
+    expect(fitGroup('comfortable', 'tight')).toBe('pressured');
+    expect(fitGroup('comfortable', 'will-thrash')).toBe('pressured');
+    expect(fitGroup('tight', 'will-thrash')).toBe('pressured');
+  });
+
+  it('reports over-budget when the model fits right now but not the safe budget', () => {
+    expect(fitGroup('will-thrash', 'tight')).toBe('over-budget');
+    expect(fitGroup('will-thrash', 'comfortable')).toBe('over-budget');
+    expect(fitGroup('tight', 'comfortable')).toBe('tight');
+  });
+
+  it('keeps a model that fits nowhere out of over-budget', () => {
+    // Equal severities don't trip `pressured`, so a naive
+    // `baseline === 'will-thrash'` test would file this under a header
+    // reading "fits right now". It fits nowhere.
+    expect(fitGroup('will-thrash', 'will-thrash')).toBe('will-thrash');
+  });
+
+  it('is unclassified when the baseline verdict is unknown', () => {
+    expect(fitGroup('unknown', 'unknown')).toBe('unclassified');
+    expect(fitGroup('unknown', 'comfortable')).toBe('unclassified');
+  });
+
+  it('falls back to the baseline when only current is unknown', () => {
+    expect(fitGroup('comfortable', 'unknown')).toBe('comfortable');
+    expect(fitGroup('will-thrash', 'unknown')).toBe('will-thrash');
+  });
+});
+
+it('puts a fit group on every row', async () => {
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend(),
+    probe: fixtureProbe(fakeSystem),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  for (const row of result.rows) {
+    expect(row.fit).toBeDefined();
+  }
+});
+
+it('carries collapsed tags through to the check row', async () => {
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend(),
+    probe: fixtureProbe(fakeSystem),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  const collapsed = result.rows.find((r) => r.name.includes('gemma-4-12B-agentic'));
+  expect(collapsed?.alsoTagged).toEqual([
+    'hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:latest',
+  ]);
+});
+
+it('leaves alsoTagged absent on a single-tag model', async () => {
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend(),
+    probe: fixtureProbe(fakeSystem),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  const single = result.rows.find((r) => r.name === 'gemma3:12b');
+  expect(single).toBeDefined();
+  expect('alsoTagged' in single!).toBe(false);
 });
 
 describe('untagged', () => {

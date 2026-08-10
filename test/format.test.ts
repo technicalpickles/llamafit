@@ -19,6 +19,7 @@ const sampleResult: CheckResult = {
       quantKnown: true,
       baselineVerdict: 'comfortable',
       currentVerdict: 'will-thrash',
+      fit: 'pressured',
     },
   ],
   cloudModels: ['glm-5.2:cloud'],
@@ -73,6 +74,7 @@ describe('formatCheckTable', () => {
           quantKnown: false,
           baselineVerdict: 'will-thrash',
           currentVerdict: 'will-thrash',
+          fit: 'will-thrash',
         },
       ],
     });
@@ -98,6 +100,7 @@ describe('formatCheckTable', () => {
           quantKnown: false,
           baselineVerdict: 'will-thrash',
           currentVerdict: 'will-thrash',
+          fit: 'will-thrash',
         },
       ],
     });
@@ -122,6 +125,7 @@ describe('formatCheckTable', () => {
           quantKnown: false,
           baselineVerdict: 'unknown',
           currentVerdict: 'unknown',
+          fit: 'unclassified',
         },
       ],
     });
@@ -146,6 +150,7 @@ describe('formatCheckTable', () => {
           quantKnown: true,
           baselineVerdict: 'comfortable',
           currentVerdict: 'comfortable',
+          fit: 'comfortable',
         },
       ],
     });
@@ -249,6 +254,7 @@ describe('remote candidate rendering', () => {
           quantKnown: false,
           baselineVerdict: 'will-thrash',
           currentVerdict: 'will-thrash',
+          fit: 'will-thrash',
           availableQuants: ['Q4_K_M', 'Q5_K_M', 'Q8_0', 'F16', 'BF16', 'IQ4_XS'],
         },
       ],
@@ -273,6 +279,7 @@ describe('remote candidate rendering', () => {
           quantKnown: false,
           baselineVerdict: 'comfortable',
           currentVerdict: 'comfortable',
+          fit: 'comfortable',
         },
       ],
       remoteGuidance: null,

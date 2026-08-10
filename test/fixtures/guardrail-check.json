@@ -10,7 +10,8 @@
       "estimateSource": "estimated",
       "quantKnown": true,
       "baselineVerdict": "comfortable",
-      "currentVerdict": "comfortable"
+      "currentVerdict": "comfortable",
+      "fit": "comfortable"
     },
     {
       "name": "gemma3:12b",
@@ -22,7 +23,8 @@
       "estimateSource": "measured",
       "quantKnown": true,
       "baselineVerdict": "comfortable",
-      "currentVerdict": "comfortable"
+      "currentVerdict": "comfortable",
+      "fit": "comfortable"
     },
     {
       "name": "gemma3:27b",
@@ -34,7 +36,8 @@
       "estimateSource": "estimated",
       "quantKnown": true,
       "baselineVerdict": "will-thrash",
-      "currentVerdict": "tight"
+      "currentVerdict": "tight",
+      "fit": "over-budget"
     },
     {
       "name": "llama3.2:3b",
@@ -46,7 +49,8 @@
       "estimateSource": "estimated",
       "quantKnown": true,
       "baselineVerdict": "comfortable",
-      "currentVerdict": "comfortable"
+      "currentVerdict": "comfortable",
+      "fit": "comfortable"
     },
     {
       "name": "hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:Q4_K_M",
@@ -58,7 +62,11 @@
       "estimateSource": "estimated",
       "quantKnown": true,
       "baselineVerdict": "comfortable",
-      "currentVerdict": "comfortable"
+      "currentVerdict": "comfortable",
+      "fit": "comfortable",
+      "alsoTagged": [
+        "hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:latest"
+      ]
     },
     {
       "name": "hf.co/ornith-ai/Ornith-1.0-9B-GGUF",
@@ -71,6 +79,7 @@
       "quantKnown": true,
       "baselineVerdict": "comfortable",
       "currentVerdict": "comfortable",
+      "fit": "comfortable",
       "author": "ornith-ai",
       "availableQuants": [
         "Q4_K_M",
@@ -98,6 +107,7 @@
       "quantKnown": true,
       "baselineVerdict": "comfortable",
       "currentVerdict": "comfortable",
+      "fit": "comfortable",
       "author": "yuxinlu1",
       "availableQuants": [
         "Q2_K",
@@ -125,6 +135,7 @@
       "quantKnown": true,
       "baselineVerdict": "comfortable",
       "currentVerdict": "comfortable",
+      "fit": "comfortable",
       "author": "RavichandranJ",
       "availableQuants": [
         "F16",
@@ -158,6 +169,7 @@
       "quantKnown": true,
       "baselineVerdict": "comfortable",
       "currentVerdict": "comfortable",
+      "fit": "comfortable",
       "author": "LiquidAI",
       "availableQuants": [
         "BF16",
@@ -187,6 +199,7 @@
       "quantKnown": true,
       "baselineVerdict": "comfortable",
       "currentVerdict": "comfortable",
+      "fit": "comfortable",
       "author": "Jackrong",
       "availableQuants": [
         "BF16",
@@ -221,6 +234,7 @@
       "quantKnown": true,
       "baselineVerdict": "comfortable",
       "currentVerdict": "comfortable",
+      "fit": "comfortable",
       "author": "LiquidAI",
       "availableQuants": [
         "BF16",
@@ -250,6 +264,7 @@
       "quantKnown": true,
       "baselineVerdict": "comfortable",
       "currentVerdict": "comfortable",
+      "fit": "comfortable",
       "author": "fraQtl",
       "availableQuants": [
         "Q4_K_M",
@@ -274,6 +289,7 @@
       "quantKnown": true,
       "baselineVerdict": "comfortable",
       "currentVerdict": "comfortable",
+      "fit": "comfortable",
       "author": "KBlueLeaf",
       "availableQuants": [
         "F16",
@@ -298,6 +314,7 @@
       "quantKnown": true,
       "baselineVerdict": "comfortable",
       "currentVerdict": "comfortable",
+      "fit": "comfortable",
       "author": "SupraLabs",
       "availableQuants": [
         "F16"
@@ -321,6 +338,7 @@
       "quantKnown": false,
       "baselineVerdict": "comfortable",
       "currentVerdict": "comfortable",
+      "fit": "comfortable",
       "discoverySource": "ollama.com"
     },
     {
@@ -334,6 +352,7 @@
       "quantKnown": false,
       "baselineVerdict": "comfortable",
       "currentVerdict": "comfortable",
+      "fit": "comfortable",
       "discoverySource": "ollama.com"
     },
     {
@@ -347,6 +366,7 @@
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
       "currentVerdict": "will-thrash",
+      "fit": "will-thrash",
       "discoverySource": "ollama.com"
     },
     {
@@ -360,6 +380,7 @@
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
       "currentVerdict": "will-thrash",
+      "fit": "will-thrash",
       "discoverySource": "ollama.com"
     },
     {
@@ -373,6 +394,7 @@
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
       "currentVerdict": "tight",
+      "fit": "over-budget",
       "discoverySource": "ollama.com"
     },
     {
@@ -386,6 +408,7 @@
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
       "currentVerdict": "will-thrash",
+      "fit": "will-thrash",
       "discoverySource": "ollama.com"
     },
     {
@@ -399,6 +422,7 @@
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
       "currentVerdict": "will-thrash",
+      "fit": "will-thrash",
       "discoverySource": "ollama.com"
     },
     {
@@ -412,6 +436,7 @@
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
       "currentVerdict": "tight",
+      "fit": "over-budget",
       "discoverySource": "ollama.com"
     },
     {
@@ -425,6 +450,7 @@
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
       "currentVerdict": "tight",
+      "fit": "over-budget",
       "discoverySource": "ollama.com"
     },
     {
@@ -438,6 +464,7 @@
       "quantKnown": false,
       "baselineVerdict": "tight",
       "currentVerdict": "comfortable",
+      "fit": "tight",
       "discoverySource": "ollama.com"
     },
     {
@@ -451,6 +478,7 @@
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
       "currentVerdict": "will-thrash",
+      "fit": "will-thrash",
       "discoverySource": "ollama.com"
     },
     {
@@ -464,6 +492,7 @@
       "quantKnown": false,
       "baselineVerdict": "comfortable",
       "currentVerdict": "comfortable",
+      "fit": "comfortable",
       "discoverySource": "ollama.com"
     },
     {
@@ -477,6 +506,7 @@
       "quantKnown": false,
       "baselineVerdict": "comfortable",
       "currentVerdict": "comfortable",
+      "fit": "comfortable",
       "discoverySource": "ollama.com"
     }
   ],
