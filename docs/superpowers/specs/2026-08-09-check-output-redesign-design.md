@@ -68,9 +68,18 @@ estimation. **The only gap this machine can produce is that false positive.**
 **Seven local rows are six models.** `hf.co/yuxinlu1/gemma-4-12B-agentic-…-GGUF`
 appears as `:Q4_K_M` and `:latest`, both digest `036489398bf6`.
 
-**The same model is offered as a remote candidate while already pulled.**
-`yuxinlu1/gemma-4-12B-agentic-…-GGUF` occupies three rows of one table: two
-local tags plus one remote candidate.
+**The same model is offered as a remote candidate while already pulled — and
+from both sources, not one.** `yuxinlu1/gemma-4-12B-agentic-…-GGUF` occupies
+three rows of one table: two local tags plus one Hugging Face candidate.
+
+**Corrected during implementation:** there is a second, independent case this
+section originally missed. `cyborgxx101/gemma-4-12b-opus-finetuned-mlx` is
+pulled locally as `:4bit` and *also* arrives from the `ollama.com` scrape — a
+duplicate pair visible in the pre-redesign snapshot all along. Dedup therefore
+has to match candidates from either source against local names, which it does
+(it keys on the untagged name, not on provenance). Found because an implementer
+verified a predicted per-source breakdown instead of accepting it: the totals
+happened to agree while the attribution did not.
 
 **`trendingScore` ranks badly for this purpose.** The HF API's own sort put
 `SupraLabs/Supra2-100M-Instruct` (0.1B, 1,462 downloads) at position 4 and
