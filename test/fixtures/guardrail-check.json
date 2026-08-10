@@ -510,6 +510,11 @@
       "discoverySource": "ollama.com"
     }
   ],
+  "recommendations": {
+    "runNow": "gemma3:12b",
+    "runNowBigger": "gemma3:27b",
+    "worthPulling": "hf.co/ornith-ai/Ornith-1.0-9B-GGUF"
+  },
   "cloudModels": [
     "glm-5.2:cloud",
     "mistral-large-3:675b-cloud",

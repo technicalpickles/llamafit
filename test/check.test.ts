@@ -664,6 +664,103 @@ it('leaves alsoTagged absent on a single-tag model', async () => {
   expect('alsoTagged' in single!).toBe(false);
 });
 
+it('recommends the largest comfortable local model and the top comfortable candidate', async () => {
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend(),
+    probe: fixtureProbe(fakeSystem),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+
+  const local = result.rows.filter((r) => r.source === 'local' && r.fit === 'comfortable');
+  const largest = local.reduce((a, b) => ((b.footprintGb ?? 0) > (a.footprintGb ?? 0) ? b : a));
+  expect(result.recommendations.runNow).toBe(largest.name);
+
+  const topRemote = result.rows.find((r) => r.source === 'remote' && r.fit === 'comfortable');
+  expect(result.recommendations.worthPulling).toBe(topRemote?.name ?? null);
+});
+
+it('names a larger over-budget local model as the bigger option', async () => {
+  // fakeSystem's wiredGb (3.8) puts gemma3:27b's currentVerdict at
+  // will-thrash too (see "classifies gemma3:27b as will-thrash under current
+  // headroom" above), so fitGroup collapses it to 'will-thrash' rather than
+  // 'over-budget' -- it fits nowhere, so there's nothing to prefer it over.
+  // A slightly lower wiredGb (3.2, matching output-guardrail.test.ts's SYSTEM,
+  // which classifies this same row 'over-budget' in guardrail-check.json)
+  // gives it enough current headroom to land in 'tight' instead, which is the
+  // scenario this test means to exercise: fits right now, rejected by the
+  // conservative baseline budget.
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend(),
+    probe: fixtureProbe({ ...fakeSystem, wiredGb: 3.2 }),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  // gemma3:27b is over-budget against the 16GB baseline and larger than any
+  // comfortable row, so it must surface as the bigger-but-riskier option.
+  expect(result.recommendations.runNowBigger).toBe('gemma3:27b');
+});
+
+it('returns nulls when a side has no qualifying row', async () => {
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend({
+      localModels: async () => ({ models: [], skipped: [] }),
+      remoteCandidates: async () => ({ candidates: [], sources: [] }),
+    }),
+    probe: fixtureProbe(fakeSystem),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  expect(result.recommendations).toEqual({
+    runNow: null,
+    runNowBigger: null,
+    worthPulling: null,
+  });
+});
+
+it('recommends the best available group when nothing is comfortable', async () => {
+  // A machine under pressure: nothing classifies comfortable, so Run now must
+  // still name something rather than going silent. Requiring 'comfortable'
+  // here would regress aa4a7d0.
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend({
+      localModels: async () => ({
+        models: [
+          { name: 'big:latest', source: 'local', url: null, parameterSizeB: 27, quantizationLevel: 'Q4_K_M', diskSizeBytes: 1 },
+          { name: 'bigger:latest', source: 'local', url: null, parameterSizeB: 30, quantizationLevel: 'Q4_K_M', diskSizeBytes: 1 },
+        ],
+        skipped: [],
+      }),
+      remoteCandidates: async () => ({ candidates: [], sources: [] }),
+    }),
+    probe: fixtureProbe(fakeSystem),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  expect(result.recommendations.runNow).not.toBeNull();
+  expect(result.recommendations.worthPulling).toBeNull();
+});
+
+it('falls back to the first local row when every row is unclassified', async () => {
+  // llama-server reports no size for a model it has never loaded. Benching it
+  // is exactly how it becomes classifiable, so it must still be named.
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend({
+      localModels: async () => ({
+        models: [
+          { name: 'never-loaded:latest', source: 'local', url: null, parameterSizeB: null, quantizationLevel: null, diskSizeBytes: null },
+        ],
+        skipped: [],
+      }),
+      remoteCandidates: async () => ({ candidates: [], sources: [] }),
+    }),
+    probe: fixtureProbe(fakeSystem),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  expect(result.recommendations.runNow).toBe('never-loaded:latest');
+});
+
 describe('untagged', () => {
   it('strips an Ollama tag', () => {
     expect(untagged('gemma3:12b')).toBe('gemma3');

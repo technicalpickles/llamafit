@@ -22,6 +22,7 @@ const sampleResult: CheckResult = {
       fit: 'pressured',
     },
   ],
+  recommendations: { runNow: null, runNowBigger: null, worthPulling: null },
   cloudModels: ['glm-5.2:cloud'],
   system: {
     totalGb: 24,

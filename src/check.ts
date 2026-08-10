@@ -83,8 +83,20 @@ export interface CheckRow {
   discoverySource?: string;
 }
 
+export interface Recommendations {
+  /** Largest local row in the best available fit group (comfortable →
+   * pressured → tight → over-budget), falling back to the first local row if
+   * none of those has one. Null only when there are no local models. */
+  runNow: string | null;
+  /** A larger local row in `over-budget`, mentioned as the bigger-but-riskier option. */
+  runNowBigger: string | null;
+  /** Highest-ranked remote row in `comfortable`. Rows arrive pre-sorted by downloads. */
+  worthPulling: string | null;
+}
+
 export interface CheckResult {
   rows: CheckRow[];
+  recommendations: Recommendations;
   cloudModels: string[];
   system: SystemMemoryState;
   baselineHeadroomGb: number;
@@ -104,6 +116,49 @@ export interface CheckDeps {
 
 /** Platforms we have no measured reserve for still need a number; 8 GB is the macOS figure. */
 const FALLBACK_BASELINE_RESERVE_GB = 8;
+
+/** Fit groups in Run now preference order. Best-available wins; this is not a
+ * filter. See recommend() for why the fallback beyond these matters. */
+const RUN_NOW_PREFERENCE: readonly FitGroup[] = [
+  'comfortable',
+  'pressured',
+  'tight',
+  'over-budget',
+];
+
+/** Computed rather than inferred from sort position, so the recommendation can
+ * encode nuance a sort order cannot — notably that the largest model a machine
+ * can run right now may be one the conservative budget rejects. */
+function recommend(rows: CheckRow[]): Recommendations {
+  const biggest = (candidates: CheckRow[]): CheckRow | null =>
+    candidates.length === 0
+      ? null
+      : candidates.reduce((a, b) => ((b.footprintGb ?? 0) > (a.footprintGb ?? 0) ? b : a));
+
+  const local = rows.filter((r) => r.source === 'local');
+  // Preference order, not a filter. Insisting on 'comfortable' would print no
+  // hint at all on a machine whose models are all tight or over-budget, and the
+  // final fallback preserves aa4a7d0: on llama-server a never-loaded model
+  // reports no size, and benching it is exactly how it becomes classifiable, so
+  // declining to name it leaves the user no way forward.
+  const preferred = RUN_NOW_PREFERENCE.map((g) =>
+    biggest(local.filter((r) => r.fit === g))
+  ).find((r) => r !== null);
+  const runNow = preferred ?? local[0] ?? null;
+  const overBudget = biggest(local.filter((r) => r.fit === 'over-budget'));
+  // Rows arrive pre-sorted by downloads, so the first match is the top-ranked one.
+  const worthPulling =
+    rows.find((r) => r.source === 'remote' && r.fit === 'comfortable') ?? null;
+
+  return {
+    runNow: runNow?.name ?? null,
+    runNowBigger:
+      overBudget && (overBudget.footprintGb ?? 0) > (runNow?.footprintGb ?? 0)
+        ? overBudget.name
+        : null,
+    worthPulling: worthPulling?.name ?? null,
+  };
+}
 
 export async function runCheck(query: string | undefined, deps: CheckDeps): Promise<CheckResult> {
   const { backend, probe, estimator, gaps } = deps;
@@ -280,8 +335,11 @@ export async function runCheck(query: string | undefined, deps: CheckDeps): Prom
     (a, b) => (b.signals?.downloads ?? -1) - (a.signals?.downloads ?? -1)
   );
 
+  const rows = [...localRows, ...rankedRemoteRows];
+
   return {
-    rows: [...localRows, ...rankedRemoteRows],
+    rows,
+    recommendations: recommend(rows),
     cloudModels,
     system,
     baselineHeadroomGb,
