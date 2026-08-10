@@ -302,12 +302,22 @@ insertion order. That is why it currently suggests
 Compute two recommendations explicitly, so sort order stops carrying meaning
 it cannot express:
 
-- **Run now** — the largest-footprint local row in `comfortable`. If a larger
-  local row exists in `over-budget`, name it as the bigger-but-riskier option
-  in the same sentence.
-- **Worth pulling** — the highest-ranked remote row in `comfortable`.
+- **Run now** — the largest-footprint local row in the best available fit
+  group, preferring `comfortable` → `pressured` → `tight` → `over-budget`, and
+  falling back to the first local row if none of those has one. If a larger
+  local row sits in `over-budget`, name it as the bigger-but-riskier option in
+  the same sentence.
+- **Worth pulling** — the highest-ranked remote row in `comfortable`, omitted
+  when there is none.
 
-Either line is omitted when its side has no qualifying row. The `Next:`
+**Corrected during execution.** An earlier draft required `comfortable` and
+emitted nothing otherwise, which regressed `aa4a7d0` ("don't recommend an
+unclassified row in the bench hint"), whose actual rule was *prefer* a
+classifiable row and fall back to `rows[0]` if none exists. Requiring
+`comfortable` would leave a machine of only tight/over-budget models with no
+next step, and would strand `runNowBigger` unrenderable whenever `runNow` was
+null. The final fallback matters most on llama-server, where a never-loaded
+model reports no size and benching it is how it becomes classifiable. The `Next:`
 bench hint uses the Run now pick, and keeps pinning `--backend <id>`
 (regression guarded by an existing test — see `aba46a6`).
 
