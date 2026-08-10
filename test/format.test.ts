@@ -181,6 +181,7 @@ describe('bench hint', () => {
       footprintGb: null,
       baselineVerdict: 'unknown' as const,
       currentVerdict: 'unknown' as const,
+      fit: 'unclassified' as const,
     };
     const table = formatCheckTable({ ...sampleResult, rows: [unknownRow, ...sampleResult.rows] });
     expect(table).toContain('llamafit bench gemma3:12b');
@@ -193,6 +194,7 @@ describe('bench hint', () => {
       name: 'qwen3-30b',
       baselineVerdict: 'unknown' as const,
       currentVerdict: 'unknown' as const,
+      fit: 'unclassified' as const,
     };
     const table = formatCheckTable({ ...sampleResult, rows: [unknownRow] });
     expect(table).toContain('llamafit bench qwen3-30b');
