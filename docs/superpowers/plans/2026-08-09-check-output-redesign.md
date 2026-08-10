@@ -1384,7 +1384,12 @@ The fixture *file* keeps its name — it is a real captured `ollama.com/search?q
 - [ ] **Step 6: Full suite and snapshot refresh**
 
 Run: `npm test`
-Expected: guardrail snapshots FAIL only in the "Remote sources:" footer line (`ollama.com search "mlx"` → `ollama.com (default list)`), because `output-guardrail.test.ts` passes an explicit `'mlx'` query to `runCheck`. Refresh with `-u` and confirm that.
+
+Expected: **guardrail snapshots do not change at all.** An earlier draft of this step predicted a shift in the "Remote sources:" footer; that was wrong. `fixtureBackend()`'s `remoteCandidates` is a complete replacement for the real backend's and never consults `SCRAPE_DEFAULT_QUERY`, and `output-guardrail.test.ts` passes an explicit `'mlx'` query anyway.
+
+The consequence is the important part: **the fixture backend cannot verify this task.** The only meaningful test drives the real `ollamaBackend.remoteCandidates` with `fetch` stubbed, which is what Step 1 does. If snapshots *do* move, something consults the constant that this plan has not accounted for — investigate rather than refreshing.
+
+Expect instead that pre-existing tests in `test/ollama-backend.test.ts` which hard-assert the `'mlx'` default will fail. Rewrite them to assert the new contract; do not delete their assertions.
 
 - [ ] **Step 7: Typecheck both configs**
 
