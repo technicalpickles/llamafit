@@ -123,8 +123,9 @@ describe('ollamaBackend mapping', () => {
     // Two sources now (ollama-hf-source) — assert the scrape rows are present
     // and correctly attributed, not that they're the only rows.
     expect(discovery.candidates.some((c) => c.discoverySource === 'ollama.com')).toBe(true);
-    expect(requestedSearchUrl).toContain('q=');
-    expect(requestedSearchUrl).not.toContain('q=mlx');
+    // The contract is "no query means no filter", not merely "not mlx" —
+    // `not.toContain('q=mlx')` would pass for q=llama or any other default.
+    expect(new URL(requestedSearchUrl!).searchParams.get('q')).toBe('');
   });
 
   it('defaults both sources to an empty query when none is given', async () => {
@@ -146,8 +147,11 @@ describe('ollamaBackend mapping', () => {
       globalThis.fetch = originalFetch;
     }
 
-    expect(calls.some((u) => u.includes('q=mlx'))).toBe(false);
-    expect(calls.some((u) => u.includes('search=mlx'))).toBe(false);
+    // Both sources must carry *no* filter, not just a different one.
+    const scrapeUrl = calls.find((u) => u.includes('ollama.com/search'))!;
+    const hfUrl = calls.find((u) => u.includes('huggingface.co/api/models'))!;
+    expect(new URL(scrapeUrl).searchParams.get('q')).toBe('');
+    expect(new URL(hfUrl).searchParams.has('search')).toBe(false);
   });
 
   it('remoteCandidates reports a failed source instead of throwing', async () => {
@@ -286,8 +290,8 @@ describe('ollamaBackend remoteCandidates (two sources)', () => {
     await ollamaBackend.remoteCandidates!();
     const scrapeUrl = fetched.find((u) => u.includes('ollama.com/search'));
     const hfUrl = fetched.find((u) => u.includes('huggingface.co/api/models'));
-    expect(scrapeUrl).not.toContain('q=mlx');
-    expect(hfUrl).not.toContain('search=');
+    expect(new URL(scrapeUrl!).searchParams.get('q')).toBe('');
+    expect(new URL(hfUrl!).searchParams.has('search')).toBe(false);
   });
 
   it('sends an explicit query to both sources verbatim', async () => {
