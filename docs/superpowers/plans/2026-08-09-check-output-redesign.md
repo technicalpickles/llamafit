@@ -1678,8 +1678,16 @@ it('names a larger over-budget local model as the bigger option', async () => {
     estimator: formulaEstimator,
     gaps: new GapCollector(),
   });
-  // gemma3:27b is over-budget against the 16GB baseline and larger than any
-  // comfortable row, so it must surface as the bigger-but-riskier option.
+  // NOTE (corrected during execution): this originally used the file's default
+  // fakeSystem (wiredGb 3.8), on the assumption gemma3:27b classifies
+  // over-budget there. It does not — at wired 3.8 currentHeadroom is 20.2GB and
+  // the ~19.27GB footprint exceeds 20.2 * thrashRatio(0.95) = 19.19, so BOTH
+  // verdicts are will-thrash and fit is 'will-thrash' (fits nowhere), not
+  // 'over-budget'. wiredGb 3.2 gives 20.8GB → tight → over-budget.
+  //
+  // That is a 0.4% margin, so this test is coupled to overheadMultiplier and
+  // thrashRatio staying put. Prefer synthetic rows with clearly-separated
+  // footprints if this ever becomes flaky.
   expect(result.recommendations.runNowBigger).toBe('gemma3:27b');
 });
 
