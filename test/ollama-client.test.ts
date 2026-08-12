@@ -6,8 +6,11 @@ import {
   modelPageUrl,
   fetchTags,
   createPullModel,
+  normalizeQuant,
+  quantFromTag,
   type OllamaTagsResponse,
 } from '../src/backends/ollama/client.js';
+import { loadQuantTable } from '../src/data.js';
 
 function loadFixture<T>(name: string): T {
   return JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf-8'));
@@ -32,6 +35,33 @@ describe('parseParameterSize', () => {
 
   it('returns null for an empty string', () => {
     expect(parseParameterSize('')).toBeNull();
+  });
+});
+
+describe('normalizeQuant', () => {
+  it('treats the literal string "unknown" as not-reported', () => {
+    expect(normalizeQuant('unknown')).toBeNull();
+  });
+
+  it('treats empty and whitespace-only as not-reported', () => {
+    expect(normalizeQuant('')).toBeNull();
+    expect(normalizeQuant('   ')).toBeNull();
+    expect(normalizeQuant(undefined)).toBeNull();
+    expect(normalizeQuant(null)).toBeNull();
+  });
+
+  it('is case-insensitive about the sentinel', () => {
+    expect(normalizeQuant('Unknown')).toBeNull();
+    expect(normalizeQuant('UNKNOWN')).toBeNull();
+  });
+
+  it('passes a real quantization through untouched, preserving case', () => {
+    expect(normalizeQuant('Q4_K_M')).toBe('Q4_K_M');
+    expect(normalizeQuant('bf16')).toBe('bf16');
+  });
+
+  it('trims surrounding whitespace off a real value', () => {
+    expect(normalizeQuant('  Q4_K_M  ')).toBe('Q4_K_M');
   });
 });
 
@@ -66,9 +96,9 @@ describe('isCloudModel', () => {
     expect(isCloudModel(localModel!)).toBe(false);
   });
 
-  it('counts exactly 4 local (non-cloud) models in the fixture', () => {
+  it('counts exactly 6 local (non-cloud) models in the fixture', () => {
     const localCount = tags.models.filter((m) => !isCloudModel(m)).length;
-    expect(localCount).toBe(4);
+    expect(localCount).toBe(6);
   });
 });
 
@@ -122,5 +152,35 @@ describe('pullModel', () => {
       throw new Error('Error: pull model manifest: file does not exist');
     });
     await expect(pullModel('nonexistentmodel')).rejects.not.toThrow(/looks like a Hugging Face repo id/);
+  });
+});
+
+describe('quantFromTag', () => {
+  const table = loadQuantTable();
+
+  it('reads a known quant off an hf.co tag', () => {
+    expect(
+      quantFromTag('hf.co/yuxinlu1/gemma-4-12B-agentic-GGUF:Q4_K_M', table)
+    ).toBe('Q4_K_M');
+  });
+
+  it('resolves an alias to its canonical id', () => {
+    expect(quantFromTag('hf.co/o/r:bf16', table)).toBe('F16');
+  });
+
+  it('returns null for a tag that is not a quantization', () => {
+    expect(quantFromTag('hf.co/o/r:latest', table)).toBeNull();
+    expect(quantFromTag('gemma3:12b', table)).toBeNull();
+    expect(quantFromTag('cyborgxx101/gemma-4-12b-mlx:4bit', table)).toBeNull();
+  });
+
+  it('returns null when there is no tag at all', () => {
+    expect(quantFromTag('mistrallite', table)).toBeNull();
+  });
+
+  it('ignores a colon that belongs to a namespace rather than a tag', () => {
+    // Delegated to splitModelTag; asserted here so the behaviour is pinned at
+    // this layer too, not just in the helper's own tests.
+    expect(quantFromTag('hf.co/owner:weird/repo', table)).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shouldUseColor, colorizeVerdict, colorizeBenchStatus } from '../src/colors.js';
+import { shouldUseColor, colorizeBenchStatus } from '../src/colors.js';
 
 describe('shouldUseColor', () => {
   it('is off when not a TTY (piped output), even with no other signal', () => {
@@ -20,18 +20,6 @@ describe('shouldUseColor', () => {
 
   it('respects FORCE_COLOR even when piped', () => {
     expect(shouldUseColor({ isTTY: false, env: { FORCE_COLOR: '1' } })).toBe(true);
-  });
-});
-
-describe('colorizeVerdict', () => {
-  it('leaves text untouched when disabled', () => {
-    expect(colorizeVerdict('comfortable', false)).toBe('comfortable');
-  });
-
-  it('wraps but preserves the original text when enabled', () => {
-    const result = colorizeVerdict('will-thrash', true);
-    expect(result).toContain('will-thrash');
-    expect(result).not.toBe('will-thrash');
   });
 });
 

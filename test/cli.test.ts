@@ -37,6 +37,16 @@ describe('createProgram subcommands', () => {
     expect(optionNames).toContain('--diagnose');
   });
 
+  it('registers the check section-expand options under the names the overflow line prints', () => {
+    const program = createProgram();
+    const check = program.commands.find((c) => c.name() === 'check');
+    expect(check).toBeDefined();
+    const optionNames = check!.options.map((o) => o.long);
+    expect(optionNames).toContain('--local');
+    expect(optionNames).toContain('--remote');
+    expect(optionNames).toContain('--all');
+  });
+
   it('registers a bench command requiring a model argument', () => {
     const program = createProgram();
     const bench = program.commands.find((c) => c.name() === 'bench');
@@ -143,7 +153,7 @@ describe('check command wiring', () => {
     await runCheckCommand({ ...CHECK_OPTS, diagnose: true }, h.deps);
 
     expect(h.exit.code).toBe(0);
-    expect(h.stdout.join('\n')).toContain('MODEL');
+    expect(h.stdout.join('\n')).toContain('safe budget');
     expect(h.bundles()).toHaveLength(1);
     const bundle = JSON.parse(readFileSync(join(h.bundleDir, h.bundles()[0]), 'utf8'));
     expect(bundle.gaps).toEqual([]);
@@ -162,7 +172,120 @@ describe('check command wiring', () => {
 
     expect(h.exit.code).toBe(0);
     expect(h.stdout).toHaveLength(1);
-    expect(h.stdout[0].startsWith('MODEL')).toBe(true);
+    // No backend heading precedes the table itself when there's only one backend.
+    expect(h.stdout[0]).toMatch(/^\d+(\.\d+)?G total/);
+  });
+
+  /** The stock fixture's PULLED section collapses to exactly SECTION_CAP (5) rows, so it
+   * never overflows on its own — these tests synthesize enough local models to force the
+   * cap, so `--local` has something real to uncap. */
+  function manyLocalModels(count: number) {
+    return async () => ({
+      models: Array.from({ length: count }, (_, i) => ({
+        name: `local-model-${i}`,
+        source: 'local' as const,
+        url: null,
+        parameterSizeB: 7,
+        quantizationLevel: 'Q4_K_M',
+        diskSizeBytes: 4_000_000_000,
+      })),
+      skipped: [],
+    });
+  }
+
+  it('--local uncaps the local section but leaves the remote +N more line', async () => {
+    const backend = fixtureBackend({ localModels: manyLocalModels(8) });
+    const h = harness({
+      detectBackends: async () => [
+        { backend, detection: { detected: true, version: '0.0.0', evidence: {} } },
+      ],
+    });
+
+    await runCheckCommand({ ...CHECK_OPTS, local: true }, h.deps);
+
+    const out = h.stdout.join('\n');
+    const [pulledSection] = out.split('PULLABLE');
+    expect(pulledSection).not.toMatch(/\+\d+ more/);
+    expect(out).toMatch(/\+\d+ more/);
+  });
+
+  it('--remote uncaps the remote section but leaves the local +N more line', async () => {
+    const backend = fixtureBackend({ localModels: manyLocalModels(8) });
+    const h = harness({
+      detectBackends: async () => [
+        { backend, detection: { detected: true, version: '0.0.0', evidence: {} } },
+      ],
+    });
+
+    await runCheckCommand({ ...CHECK_OPTS, remote: true }, h.deps);
+
+    const out = h.stdout.join('\n');
+    const [, pullableSection = ''] = out.split('PULLABLE');
+    expect(pullableSection).not.toMatch(/\+\d+ more/);
+    expect(out).toMatch(/\+\d+ more/);
+  });
+
+  it('--all uncaps both sections', async () => {
+    const backend = fixtureBackend({ localModels: manyLocalModels(8) });
+    const h = harness({
+      detectBackends: async () => [
+        { backend, detection: { detected: true, version: '0.0.0', evidence: {} } },
+      ],
+    });
+
+    await runCheckCommand({ ...CHECK_OPTS, all: true }, h.deps);
+
+    expect(h.stdout.join('\n')).not.toMatch(/\+\d+ more/);
+  });
+
+  it('rejects --local together with --remote, before ever probing backends', async () => {
+    const h = harness({
+      detectBackends: async () => {
+        throw new Error('should not reach detection: mutual-exclusion check must run first');
+      },
+    });
+
+    await runCheckCommand({ ...CHECK_OPTS, local: true, remote: true }, h.deps);
+
+    expect(h.stderr.join('\n')).toContain('--all');
+    expect(h.exit.code).toBe(1);
+    expect(h.stdout).toEqual([]);
+  });
+
+  it('accepts --local --remote --all: the flag the error tells you to use must work', async () => {
+    // The mutual-exclusion guard used to fire even when --all was present, so
+    // `check --local --remote --all` told the reader to use the very flag they
+    // had just passed. --all already means both sections, so it settles it.
+    const backend = fixtureBackend({ localModels: manyLocalModels(8) });
+    const h = harness({
+      detectBackends: async () => [
+        { backend, detection: { detected: true, version: '0.0.0', evidence: {} } },
+      ],
+    });
+
+    await runCheckCommand({ ...CHECK_OPTS, local: true, remote: true, all: true }, h.deps);
+
+    expect(h.stderr).toEqual([]);
+    expect(h.exit.code).toBe(0);
+    const out = h.stdout.join('\n');
+    expect(out).toContain('PULLED');
+    expect(out).toContain('PULLABLE');
+    expect(out).not.toMatch(/\+\d+ more/);
+  });
+
+  it('--all alongside --json leaves the JSON output unchanged', async () => {
+    const backend = fixtureBackend();
+    const detected = async () => [
+      { backend, detection: { detected: true, version: '0.0.0', evidence: {} } },
+    ];
+
+    const plain = harness({ detectBackends: detected });
+    await runCheckCommand({ ...CHECK_OPTS, json: true }, plain.deps);
+
+    const expanded = harness({ detectBackends: detected });
+    await runCheckCommand({ ...CHECK_OPTS, json: true, all: true }, expanded.deps);
+
+    expect(expanded.stdout.join('\n')).toBe(plain.stdout.join('\n'));
   });
 
   it('multiple backends get a heading per table, and a keyed object in --json', async () => {
@@ -224,7 +347,7 @@ describe('check command wiring', () => {
     expect(err).not.toContain('issues/new?');
     expect(err).not.toContain("doesn't support yet");
     expect(h.bundles()).toEqual([]);
-    expect(h.stdout.join('\n')).toContain('MODEL');
+    expect(h.stdout.join('\n')).toContain('safe budget');
   });
 
   it('--diagnose still records a scrape failure in the bundle, without prompting for it', async () => {
@@ -266,7 +389,7 @@ describe('check command wiring', () => {
     expect(err).toContain('could not write the diagnostics bundle');
     expect(err).toContain('EROFS');
     // The table printed and the check itself succeeded, so the run is still a success.
-    expect(h.stdout.join('\n')).toContain('MODEL');
+    expect(h.stdout.join('\n')).toContain('safe budget');
     expect(h.exit.code).toBe(0);
   });
 
@@ -323,7 +446,7 @@ describe('check command wiring', () => {
     // per-backend heading) — the point is that it renders at all instead of being
     // dropped along with the backend that threw.
     const out = h.stdout.join('\n');
-    expect(out).toContain('MODEL');
+    expect(out).toContain('safe budget');
     expect(h.exit.code).toBe(0);
   });
 

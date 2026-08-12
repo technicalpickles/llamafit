@@ -312,6 +312,9 @@ export interface CheckCommandOptions {
   json?: boolean;
   backend?: string;
   diagnose?: boolean;
+  local?: boolean;
+  remote?: boolean;
+  all?: boolean;
 }
 
 export function runCheckCommand(opts: CheckCommandOptions, deps: CliDeps): Promise<void> {
@@ -321,6 +324,29 @@ export function runCheckCommand(opts: CheckCommandOptions, deps: CliDeps): Promi
 async function checkCommand(opts: CheckCommandOptions, deps: CliDeps): Promise<void> {
   const color = opts.color;
   const gaps = new GapCollector();
+
+  // Mutually exclusive by design: --local and --remote each mean "expand only
+  // this one", so asking for both is asking for --all. Say that rather than
+  // silently picking one. Checked before resolve() so a flag conflict fails
+  // fast without probing backends over the network.
+  //
+  // Unless --all is already there: the error names --all as the fix, so firing
+  // it on `--local --remote --all` would tell the reader to use the flag they
+  // just used. --all subsumes both, so there is nothing left to disambiguate.
+  if (opts.local && opts.remote && !opts.all) {
+    deps.stderr(
+      error(`${label('Error:', color)} use --all to expand both sections`, color)
+    );
+    deps.setExitCode(1);
+    return;
+  }
+  const expand = opts.all
+    ? 'all'
+    : opts.local
+      ? 'local'
+      : opts.remote
+        ? 'remote'
+        : undefined;
 
   const resolved = await resolve(opts.backend, gaps, deps, color);
   if (!resolved.ok) {
@@ -389,7 +415,7 @@ async function checkCommand(opts: CheckCommandOptions, deps: CliDeps): Promise<v
         deps.stdout(label(backend.displayName, color));
         deps.stdout('');
       }
-      deps.stdout(formatCheckTable(result, { color, backendId: backend.id }));
+      deps.stdout(formatCheckTable(result, { color, backendId: backend.id, expand }));
     }
   }
 
@@ -477,6 +503,9 @@ export function createProgram(): Command {
     .option('--no-color', 'disable colored output')
     .option('--backend <id>', 'use a specific backend instead of detecting them')
     .option('--diagnose', 'write a diagnostics bundle even when nothing failed')
+    .option('--local', 'show the full local inventory, uncapped')
+    .option('--remote', 'show the full remote candidate list, uncapped')
+    .option('--all', 'show both sections uncapped')
     .action(
       async (opts: {
         json?: boolean;
@@ -484,6 +513,9 @@ export function createProgram(): Command {
         color: boolean;
         backend?: string;
         diagnose?: boolean;
+        local?: boolean;
+        remote?: boolean;
+        all?: boolean;
       }) => {
         await runCheckCommand(
           {
@@ -492,6 +524,9 @@ export function createProgram(): Command {
             json: opts.json,
             backend: opts.backend,
             diagnose: opts.diagnose,
+            local: opts.local,
+            remote: opts.remote,
+            all: opts.all,
           },
           createCliDeps()
         );

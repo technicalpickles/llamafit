@@ -526,7 +526,9 @@ wins over the tag."
 
 Seven local rows are six models: `…-GGUF:Q4_K_M` and `…-GGUF:latest` share digest `036489398bf6…`. Collapse them.
 
-**Ordering matters:** this must run *after* quant resolution, because the representative-tag rule depends on which tag yielded a quant. Collapsing first on the shortest name would pick `:latest` and discard the only tag naming a quantization.
+**Ordering matters:** this must run *after* quant resolution, because the representative-tag rule prefers whichever tag yielded a quant. Reverse the order and every tag's quant is still `null` at collapse time, so that preference cannot fire and the shortest-name fallback decides alone.
+
+**Corrected during execution — the original justification here was wrong.** It claimed the shortest-name fallback "would pick `:latest`" over `:Q4_K_M`. Both tags are exactly 6 characters, so shortest-name does not discriminate between them; the tie resolves by insertion order, which in `api-tags.json` already favours `:Q4_K_M`. Replaying the real fixture through both orders yields identical output, so the real fixture **cannot** pin this constraint. A test that discriminates needs the quant-bearing tag to be both longer and later than its sibling — see the synthetic-input test in Step 7.
 
 **Files:**
 - Modify: `src/types.ts`
@@ -637,11 +639,15 @@ Add to `src/backends/ollama/index.ts`:
 
 ```ts
 /** Two tags pointing at the same digest are the same weights, so they are one
- * row. Representative choice is deliberate and order-dependent: prefer a tag
- * whose quantization resolved (which, after quantFromTag, means the tag itself
- * named a quant), else the shortest name. Picking "shortest" unconditionally
- * would choose `:latest` over `:Q4_K_M` and throw away the only tag carrying
- * that information — hence this runs after quant resolution, not before. */
+ * row. Representative choice: prefer a tag whose quantization resolved (which,
+ * after quantFromTag, means the tag itself named a quant), else the shortest
+ * name, ties going to first appearance.
+ *
+ * Call this AFTER quant resolution. Before it, every quant is still null, so
+ * the preference can't fire and the survivor is decided by name length and
+ * insertion order — neither of which tracks which tag carries usable
+ * information. Equal-length siblings like `:latest` and `:Q4_K_M` make that
+ * especially arbitrary. */
 export function collapseByDigest(models: ModelInfo[]): ModelInfo[] {
   const groups = new Map<string, ModelInfo[]>();
   const out: ModelInfo[] = [];
@@ -708,9 +714,9 @@ git add src/types.ts src/backends/ollama/index.ts test/ollama-backend.test.ts te
 git commit -m "feat: collapse local models sharing a digest
 
 Two tags on one digest are the same weights. Representative tag prefers one
-whose quantization resolved, else the shortest name -- picking shortest
-unconditionally would choose :latest over :Q4_K_M and discard the only tag
-naming a quant, so this runs after quant resolution."
+whose quantization resolved, else the shortest name. Runs after quant
+resolution: before it, every quant is null, so the preference can't fire and
+the survivor is picked by name length and insertion order instead."
 ```
 
 ---
@@ -747,7 +753,7 @@ describe('pickQuant', () => {
     expect(pickQuant(['Q8_0', 'Q5_K_M', 'Q4_0'], table)).toBe('Q4_0');
   });
 
-  it('resolves an alias of the fallback to the canonical id', () => {
+  it('resolves an alias to its canonical id via the nearest-match branch', () => {
     expect(pickQuant(['MXFP4'], table)).toBe('Q4_0');
   });
 
@@ -913,6 +919,108 @@ availableQuants was fetched and discarded, so every remote row blind-guessed
 the table fallback and printed Q4_K_M? -- while the real quant list printed
 in a separate block at the bottom of the output. Prefer the fallback quant
 when the repo offers it, else nearest bytes-per-param."
+```
+
+---
+
+## Task 4b: `fixture-hf-coverage`
+
+**Added during execution.** Task 4's implementer reported that the guardrail snapshots did not change, and was right to be suspicious. `fixtureBackend()`'s `remoteCandidates` returns only `mapCandidates(parseSearchResults('ollama-search-mlx.html'))` — scrape candidates. Verified: all 16 remote rows in `guardrail-check.json` have `discoverySource: 'ollama.com'` and **zero** carry `signals`. So `hfCandidatesToModelInfo` has no end-to-end coverage at all.
+
+That blinds four tasks, not one:
+
+| Task | What it needs that scrape rows cannot provide |
+| --- | --- |
+| 4 `remote-real-quants` | `availableQuants` — scrape candidates have none |
+| 5 `remote-rank` | `signals.downloads` — only HF supplies it |
+| 6 `remote-filter` | `hf.co/<repo>` pull names, which is what dedup matches on |
+| 11 `render-sections` | the downloads column |
+
+It also becomes actively misleading after Task 7, which makes HF the default source and drops the scraper to `--query` only: the fixture would model a path the default no longer takes.
+
+Slug-named rather than renumbered to Task 5, so every later task keeps its number and no existing cross-reference rots.
+
+**Files:**
+- Modify: `test/helpers/fixture-backend.ts`
+- Test: `test/output-guardrail.test.ts` (snapshots), plus any count assertions
+
+**Interfaces:**
+- Consumes: `hfCandidatesToModelInfo` (`src/hf/model-info.js`), `mapHitToCandidate` (`src/hf/discovery.js`), the `hf-models-search.json` fixture
+- Produces: `fixtureBackend()` returning candidates from **both** sources with two source reports, matching what the real ollama backend does
+
+- [ ] **Step 1: Make the fixture backend mirror the real backend's two-source shape**
+
+The real `ollamaBackend.remoteCandidates` queries `ollama.com` and Hugging Face and concatenates both. Mirror that, running the HF fixture through the *same* mapping functions the real backend uses, so a mapping bug cannot hide behind hand-rolled test data — the property the existing helper's docstring already claims.
+
+In `test/helpers/fixture-backend.ts`:
+
+```ts
+import { mapHitToCandidate, type HfModelHit } from '../../src/hf/discovery.js';
+import { hfCandidatesToModelInfo } from '../../src/hf/model-info.js';
+```
+
+and replace the `remoteCandidates` stub with:
+
+```ts
+    // Mirrors the real ollama backend: ollama.com scrape plus Hugging Face,
+    // concatenated, both through the production mapping functions. The HF half
+    // is what carries availableQuants and signals — without it, nothing in the
+    // guardrail exercises the quant-picking, ranking, or dedup paths.
+    remoteCandidates: async (query?: string) => ({
+      candidates: [
+        ...mapCandidates(parseSearchResults(loadTextFixture('ollama-search-mlx.html'))),
+        ...hfCandidatesToModelInfo(
+          loadJsonFixture<HfModelHit[]>('hf-models-search.json').map(mapHitToCandidate),
+          (c) => `hf.co/${c.repoId}`
+        ),
+      ],
+      sources: [
+        { id: 'ollama.com', query: query ?? '', ok: true },
+        { id: 'huggingface', query: query ?? '', ok: true },
+      ],
+    }),
+```
+
+The `hf.co/${c.repoId}` pull-name shape matches ollama's `hfPullName`. This also lands Task 7's `query ?? ''` change to this helper early, which is fine — Task 7 Step 5 then has nothing left to do here and should say so rather than redo it.
+
+- [ ] **Step 2: Run the suite and see what moves**
+
+Run: `npm test`
+
+Expect the guardrail snapshots to fail with 10 new remote rows, and expect some count assertions elsewhere to fail. Fix count assertions to their correct new values — never loosen them.
+
+- [ ] **Step 3: Refresh snapshots and verify the HF path is genuinely covered**
+
+Run: `npx vitest run test/output-guardrail.test.ts -u`
+
+Then confirm, by reading `test/fixtures/guardrail-check.json`:
+
+- Remote rows now include entries with `discoverySource: 'huggingface'`.
+- Those rows carry `signals` with real `downloads` values.
+- Those rows carry `availableQuants`.
+- **Their `quantizationLevel` is a real quant with `quantKnown: true`** — this is the end-to-end proof of Task 4 that was missing. `ornith-ai/Ornith-1.0-9B-GGUF` should show `Q4_K_M`, not `Q4_K_M?`.
+- Local rows are unchanged.
+
+If HF rows show `quantKnown: false`, Task 4 is not working end to end and this task has found a real bug — stop and report rather than committing.
+
+- [ ] **Step 4: Typecheck both configs**
+
+Run: `npm run typecheck && npm run build`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add test/helpers/fixture-backend.ts test/fixtures/ test/
+git commit -m "test: cover the Hugging Face path in the fixture backend
+
+fixtureBackend() returned only ollama.com scrape candidates, so all 16 remote
+rows in the guardrail carried no signals and no availableQuants -- meaning
+hfCandidatesToModelInfo had no end-to-end coverage, and the ranking, dedup,
+and downloads-column work that depends on HF metadata would have been
+snapshot-blind too.
+
+Now mirrors the real backend: both sources, concatenated, both through the
+production mapping functions."
 ```
 
 ---
@@ -1258,7 +1366,9 @@ In `src/backends/ollama/index.ts`, remove the `SCRAPE_DEFAULT_QUERY` declaration
 Run: `npx vitest run test/ollama-backend.test.ts -t "empty query"`
 Expected: PASS
 
-- [ ] **Step 5: Drop the `'mlx'` default from the test helper**
+- [ ] **Step 5: Drop the `'mlx'` default from the test helper** — *already done by Task 4b*
+
+Task 4b changed this helper's source reports to `query ?? ''` while adding HF coverage. Verify that is still the case and move on; do not redo it.
 
 In `test/helpers/fixture-backend.ts`, change the `remoteCandidates` stub's source report so it no longer invents a default:
 
@@ -1274,7 +1384,12 @@ The fixture *file* keeps its name — it is a real captured `ollama.com/search?q
 - [ ] **Step 6: Full suite and snapshot refresh**
 
 Run: `npm test`
-Expected: guardrail snapshots FAIL only in the "Remote sources:" footer line (`ollama.com search "mlx"` → `ollama.com (default list)`), because `output-guardrail.test.ts` passes an explicit `'mlx'` query to `runCheck`. Refresh with `-u` and confirm that.
+
+Expected: **guardrail snapshots do not change at all.** An earlier draft of this step predicted a shift in the "Remote sources:" footer; that was wrong. `fixtureBackend()`'s `remoteCandidates` is a complete replacement for the real backend's and never consults `SCRAPE_DEFAULT_QUERY`, and `output-guardrail.test.ts` passes an explicit `'mlx'` query anyway.
+
+The consequence is the important part: **the fixture backend cannot verify this task.** The only meaningful test drives the real `ollamaBackend.remoteCandidates` with `fetch` stubbed, which is what Step 1 does. If snapshots *do* move, something consults the constant that this plan has not accounted for — investigate rather than refreshing.
+
+Expect instead that pre-existing tests in `test/ollama-backend.test.ts` which hard-assert the `'mlx'` default will fail. Rewrite them to assert the new contract; do not delete their assertions.
 
 - [ ] **Step 7: Typecheck both configs**
 
@@ -1419,7 +1534,59 @@ In the `CheckRow` interface:
 
 Then add `fit: fitGroup(<baseline>, <current>)` to each of the four `CheckRow` object literals in `runCheck` (the measured-local branch, the null-params local branch, the estimated-local branch, and the remote branch), using that branch's own verdict values. For the null-params branch both are `'unknown'`, so `fit: 'unclassified'`.
 
-- [ ] **Step 5: Fix the hand-built row literals in the tests**
+- [ ] **Step 5: Project `alsoTagged` from `ModelInfo` onto `CheckRow`**
+
+**Plan defect found during execution** (Task 3's implementer caught it): Task 3 sets `alsoTagged` on `ModelInfo`, but `CheckRow` is a separate interface and nothing projected the field across — so the collapsed tags never reached rendering, and Task 11's `cells()` would read `r.alsoTagged` off a row that never had it. It was dead data. Task 3's tests didn't catch it because they assert on `mapTagsToLocalModels` output, not on `runCheck`. Assigned here because this task already touches `CheckRow` and every literal in `runCheck`.
+
+Add to the `CheckRow` interface:
+
+```ts
+  /** Other tags pointing at the same weights, collapsed by the backend. Absent
+   * when there are none, so --json output stays byte-identical for single-tag
+   * models. Display-only — the collapse decision already happened upstream. */
+  alsoTagged?: string[];
+```
+
+Populate it on the **three local** branches only (remote candidates have no tags to collapse), spreading conditionally so the key stays absent rather than becoming `undefined`:
+
+```ts
+        ...(model.alsoTagged !== undefined ? { alsoTagged: model.alsoTagged } : {}),
+```
+
+Do **not** project `digest`. It is an internal grouping key with no display use, and adding it to `CheckRow` would change `--json` output for every row to no purpose.
+
+Add a test to `test/check.test.ts` pinning the projection end to end — the gap existed precisely because nothing tested this seam:
+
+```ts
+it('carries collapsed tags through to the check row', async () => {
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend(),
+    probe: fixtureProbe(SYSTEM),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  const collapsed = result.rows.find((r) => r.name.includes('gemma-4-12B-agentic'));
+  expect(collapsed?.alsoTagged).toEqual([
+    'hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:latest',
+  ]);
+});
+
+it('leaves alsoTagged absent on a single-tag model', async () => {
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend(),
+    probe: fixtureProbe(SYSTEM),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  const single = result.rows.find((r) => r.name === 'gemma3:12b');
+  expect(single).toBeDefined();
+  expect('alsoTagged' in single!).toBe(false);
+});
+```
+
+Reuse the `SYSTEM`/binding names already present in `test/check.test.ts`.
+
+- [ ] **Step 6: Fix the hand-built row literals in the tests**
 
 `fit` is required, so every hand-built `CheckRow` literal stops typechecking — and `npm test` alone will not tell you, because vitest transpiles without typechecking. `test/format.test.ts` has 9 such literals; `test/check.test.ts` has 1.
 
@@ -1427,21 +1594,23 @@ Run `npm run typecheck` to get the exact list, then add the correct `fit` value 
 
 `test/formula-estimator.test.ts` builds `Estimate` objects, not `CheckRow`s, so it needs no change.
 
-- [ ] **Step 6: Run it and confirm it passes**
+- [ ] **Step 7: Run it and confirm it passes**
 
 Run: `npx vitest run test/check.test.ts`
 Expected: PASS
 
-- [ ] **Step 7: Full suite and snapshot refresh**
+- [ ] **Step 8: Full suite and snapshot refresh**
 
-Run: `npm test` → `guardrail-check.json` FAILs (new field on every row); the table snapshot should be unchanged. Refresh with `-u`.
+Run: `npm test` → `guardrail-check.json` FAILs (new `fit` field on every row, plus `alsoTagged` on the collapsed row); the table snapshot should be unchanged, since `fit` is not rendered until Task 11. Refresh with `-u`.
 
-- [ ] **Step 8: Typecheck both configs**
+The `alsoTagged` appearing in `guardrail-check.json` is the visible proof the Step 5 projection works — Task 3's snapshot refresh did **not** show it, which is how the gap was found.
+
+- [ ] **Step 9: Typecheck both configs**
 
 Run: `npm run typecheck && npm run build`
-Expected: both clean. If `typecheck` still reports missing `fit`, Step 5 is incomplete.
+Expected: both clean. If `typecheck` still reports missing `fit`, Step 6 is incomplete.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add src/check.ts test/check.test.ts test/format.test.ts test/fixtures/guardrail-check.json
@@ -1470,7 +1639,9 @@ nowhere lands in a group labelled 'fits right now'."
 
 ```ts
 export interface Recommendations {
-  /** Largest local row in `comfortable`. */
+  /** Largest local row in the best available fit group (comfortable →
+   * pressured → tight → over-budget), falling back to the first local row if
+   * none of those has one. Null only when there are no local models. */
   runNow: string | null;
   /** A larger local row in `over-budget`, mentioned as the bigger-but-riskier option. */
   runNowBigger: string | null;
@@ -1507,8 +1678,16 @@ it('names a larger over-budget local model as the bigger option', async () => {
     estimator: formulaEstimator,
     gaps: new GapCollector(),
   });
-  // gemma3:27b is over-budget against the 16GB baseline and larger than any
-  // comfortable row, so it must surface as the bigger-but-riskier option.
+  // NOTE (corrected during execution): this originally used the file's default
+  // fakeSystem (wiredGb 3.8), on the assumption gemma3:27b classifies
+  // over-budget there. It does not — at wired 3.8 currentHeadroom is 20.2GB and
+  // the ~19.27GB footprint exceeds 20.2 * thrashRatio(0.95) = 19.19, so BOTH
+  // verdicts are will-thrash and fit is 'will-thrash' (fits nowhere), not
+  // 'over-budget'. wiredGb 3.2 gives 20.8GB → tight → over-budget.
+  //
+  // That is a 0.4% margin, so this test is coupled to overheadMultiplier and
+  // thrashRatio staying put. Prefer synthetic rows with clearly-separated
+  // footprints if this ever becomes flaky.
   expect(result.recommendations.runNowBigger).toBe('gemma3:27b');
 });
 
@@ -1528,6 +1707,49 @@ it('returns nulls when a side has no qualifying row', async () => {
     worthPulling: null,
   });
 });
+
+it('recommends the best available group when nothing is comfortable', async () => {
+  // A machine under pressure: nothing classifies comfortable, so Run now must
+  // still name something rather than going silent. Requiring 'comfortable'
+  // here would regress aa4a7d0.
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend({
+      localModels: async () => ({
+        models: [
+          { name: 'big:latest', source: 'local', url: null, parameterSizeB: 27, quantizationLevel: 'Q4_K_M', diskSizeBytes: 1 },
+          { name: 'bigger:latest', source: 'local', url: null, parameterSizeB: 30, quantizationLevel: 'Q4_K_M', diskSizeBytes: 1 },
+        ],
+        skipped: [],
+      }),
+      remoteCandidates: async () => ({ candidates: [], sources: [] }),
+    }),
+    probe: fixtureProbe(SYSTEM),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  expect(result.recommendations.runNow).not.toBeNull();
+  expect(result.recommendations.worthPulling).toBeNull();
+});
+
+it('falls back to the first local row when every row is unclassified', async () => {
+  // llama-server reports no size for a model it has never loaded. Benching it
+  // is exactly how it becomes classifiable, so it must still be named.
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend({
+      localModels: async () => ({
+        models: [
+          { name: 'never-loaded:latest', source: 'local', url: null, parameterSizeB: null, quantizationLevel: null, diskSizeBytes: null },
+        ],
+        skipped: [],
+      }),
+      remoteCandidates: async () => ({ candidates: [], sources: [] }),
+    }),
+    probe: fixtureProbe(SYSTEM),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  expect(result.recommendations.runNow).toBe('never-loaded:latest');
+});
 ```
 
 - [ ] **Step 2: Run it and confirm it fails for the right reason**
@@ -1546,6 +1768,15 @@ export interface Recommendations {
   worthPulling: string | null;
 }
 
+/** Fit groups in Run now preference order. Best-available wins; this is not a
+ * filter. See recommend() for why the fallback beyond these matters. */
+const RUN_NOW_PREFERENCE: readonly FitGroup[] = [
+  'comfortable',
+  'pressured',
+  'tight',
+  'over-budget',
+];
+
 /** Computed rather than inferred from sort position, so the recommendation can
  * encode nuance a sort order cannot — notably that the largest model a machine
  * can run right now may be one the conservative budget rejects. */
@@ -1556,7 +1787,15 @@ function recommend(rows: CheckRow[]): Recommendations {
       : candidates.reduce((a, b) => ((b.footprintGb ?? 0) > (a.footprintGb ?? 0) ? b : a));
 
   const local = rows.filter((r) => r.source === 'local');
-  const runNow = biggest(local.filter((r) => r.fit === 'comfortable'));
+  // Preference order, not a filter. Insisting on 'comfortable' would print no
+  // hint at all on a machine whose models are all tight or over-budget, and the
+  // final fallback preserves aa4a7d0: on llama-server a never-loaded model
+  // reports no size, and benching it is exactly how it becomes classifiable, so
+  // declining to name it leaves the user no way forward.
+  const preferred = RUN_NOW_PREFERENCE.map((g) =>
+    biggest(local.filter((r) => r.fit === g))
+  ).find((r) => r !== null);
+  const runNow = preferred ?? local[0] ?? null;
   const overBudget = biggest(local.filter((r) => r.fit === 'over-budget'));
   // Rows arrive pre-sorted by downloads, so the first match is the top-ranked one.
   const worthPulling =
@@ -2002,15 +2241,45 @@ function bySizeDesc(a: CheckRow, b: CheckRow): number {
   return b.footprintGb - a.footprintGb;
 }
 
-/** Flattens to display order: group order first, size descending within each.
- * Capping then slices this list, so the cap is defined over the section rather
- * than per group — five rows means five rows, whatever mix of groups. */
-function orderRows(rows: CheckRow[]): CheckRow[] {
-  return GROUP_ORDER.flatMap((g) => rows.filter((r) => r.fit === g).sort(bySizeDesc));
+/** Downloads descending, nulls last. Same comparator shape as check.ts's remote
+ * ranking, applied within a group so the section's stated order survives the
+ * grouping. */
+function byDownloadsDesc(a: CheckRow, b: CheckRow): number {
+  return (b.signals?.downloads ?? -1) - (a.signals?.downloads ?? -1);
+}
+
+/** Flattens to display order: group order first, then the section's own ranking
+ * axis within each group. Capping slices this list, so the cap is defined over
+ * the section rather than per group — five rows means five rows, whatever mix of
+ * groups.
+ *
+ * The comparator is a parameter, not a constant: PULLED ranks by footprint
+ * (biggest thing that fits first), PULLABLE by downloads. Hardcoding
+ * bySizeDesc for both made the PULLABLE header read "by downloads" while the
+ * rows were size-ordered — the 4.6M-download pick landed third in its own list. */
+function orderRows(
+  rows: CheckRow[],
+  within: (a: CheckRow, b: CheckRow) => number
+): CheckRow[] {
+  return GROUP_ORDER.flatMap((g) => rows.filter((r) => r.fit === g).sort(within));
+}
+
+/** Collapsed sibling tags render as just their tag (`:latest`), never the whole
+ * repeated name. Sharing a digest means the base name is identical by
+ * definition, so repeating it is pure noise — and because column widths span
+ * the section, one long HF repo name rendered twice padded every other row in
+ * PULLED out past 170 columns. */
+function siblingTags(alsoTagged: string[] | undefined): string {
+  if (!alsoTagged?.length) return '';
+  const shown = alsoTagged.map((name) => {
+    const { tag } = splitModelTag(name);
+    return tag === null ? name : `:${tag}`;
+  });
+  return ` (${shown.join(', ')})`;
 }
 
 function cells(r: CheckRow, withDownloads: boolean): string[] {
-  const tags = r.alsoTagged?.length ? ` (${r.alsoTagged.join(', ')})` : '';
+  const tags = siblingTags(r.alsoTagged);
   const measured = r.estimateSource === 'measured';
   const raw = r.footprintGb !== null ? `${r.footprintGb.toFixed(1)}G` : '?';
   const out = [
@@ -2034,6 +2303,9 @@ function renderSection(
     flag: string;
     emptyMessage: string;
     withDownloads: boolean;
+    /** Ranking axis within each fit group — footprint for PULLED, downloads for
+     * PULLABLE. See orderRows(). */
+    within: (a: CheckRow, b: CheckRow) => number;
     suffix?: string;
   }
 ): string[] {
@@ -2041,7 +2313,7 @@ function renderSection(
     return [label(`${title} (0)`, o.color), `  ${dim(o.emptyMessage, o.color)}`];
   }
 
-  const ordered = orderRows(rows);
+  const ordered = orderRows(rows, o.within);
   const shown = o.expanded ? ordered : ordered.slice(0, SECTION_CAP);
   const hidden = ordered.length - shown.length;
 
@@ -2136,6 +2408,7 @@ export function formatCheckTable(result: CheckResult, opts: FormatOptions = {}):
       flag: '--local',
       emptyMessage: 'No models pulled yet.',
       withDownloads: false,
+      within: bySizeDesc,
     })
   );
 
@@ -2148,6 +2421,7 @@ export function formatCheckTable(result: CheckResult, opts: FormatOptions = {}):
       flag: '--remote',
       emptyMessage: 'No remote candidates found.',
       withDownloads: true,
+      within: byDownloadsDesc,
       suffix: sourceIds.length > 0 ? `${sourceIds.join(' + ')}, by downloads` : undefined,
     })
   );
@@ -2158,7 +2432,7 @@ export function formatCheckTable(result: CheckResult, opts: FormatOptions = {}):
     legend.push('~ = estimated from parameter count and quantization (model not currently loaded)');
   }
   if (result.rows.some((r) => !r.quantKnown && r.quantizationLevel !== null)) {
-    legend.push('? after QUANT = quantization not reported; assumed for the estimate');
+    legend.push('? after a quantization = not reported by the backend; assumed for the estimate');
   }
   if (result.rows.some((r) => r.parameterSizeB === null)) {
     legend.push(

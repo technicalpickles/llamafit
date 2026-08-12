@@ -13,6 +13,12 @@ export interface ModelInfo {
   signals?: RemoteSignals | null;
   /** Which discovery source produced this row ('ollama.com', 'huggingface'). */
   discoverySource?: string;
+  /** Content digest, when the backend reports one. Two tags sharing a digest are
+   * the same weights, so they collapse to one row. */
+  digest?: string;
+  /** Other tags pointing at this same digest, for display. Absent when there
+   * are none, keeping JSON output byte-identical for single-tag models. */
+  alsoTagged?: string[];
 }
 
 export interface RemoteSignals {

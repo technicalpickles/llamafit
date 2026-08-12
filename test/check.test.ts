@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { runCheck, type CheckDeps } from '../src/check.js';
+import { runCheck, untagged, isNonChat, fitGroup, recommend, type CheckDeps } from '../src/check.js';
 import type { OllamaTagsResponse } from '../src/backends/ollama/client.js';
 import type { ModelInfo } from '../src/types.js';
 import type { SystemMemoryState } from '../src/probes/types.js';
@@ -9,6 +9,8 @@ import { GapCollector } from '../src/gaps.js';
 import { mapTagsToLocalModels } from '../src/backends/ollama/index.js';
 import { fixtureBackend, fixtureProbe, loadJsonFixture } from './helpers/fixture-backend.js';
 import { REMOTE_GUIDANCE } from '../src/hf/guidance.js';
+import { hfCandidatesToModelInfo } from '../src/hf/model-info.js';
+import type { HfCandidate } from '../src/hf/discovery.js';
 
 const fakeSystem: SystemMemoryState = {
   totalGb: 24,
@@ -44,7 +46,7 @@ describe('runCheck', () => {
 
     expect(result.rows.every((r) => r.source !== 'local' || !r.name.includes(':cloud'))).toBe(true);
     expect(result.cloudModels).toContain('glm-5.2:cloud');
-    expect(result.rows.filter((r) => r.source === 'local').length).toBe(4);
+    expect(result.rows.filter((r) => r.source === 'local').length).toBe(5);
   });
 
   it('computes baseline headroom as total minus the fixed macOS reserve', async () => {
@@ -79,7 +81,7 @@ describe('runCheck', () => {
       })
     );
     expect(result.scrapeWarning).toMatch(/network unreachable/);
-    expect(result.rows.filter((r) => r.source === 'local').length).toBe(4);
+    expect(result.rows.filter((r) => r.source === 'local').length).toBe(5);
   });
 
   it('includes remote candidates with a parsed size, using the unknown-quant fallback', async () => {
@@ -119,6 +121,41 @@ describe('runCheck', () => {
     expect(row!.quantizationLevel).toBe('Q4_K_M'); // fallback, unknown quant
     // remote candidate with no parsed size should be excluded, not shown with a bogus estimate
     expect(result.rows.find((r) => r.name === 'mistral-large-3')).toBeUndefined();
+  });
+
+  it('routes an HF candidate through hfCandidatesToModelInfo end-to-end so quantKnown flips true', async () => {
+    // Regression guard for the remote-real-quants change: a repo that actually
+    // publishes the table's fallback quant should reach runCheck with a known
+    // quantizationLevel, not the blind Q4_K_M? guess. Built from a real
+    // HfCandidate through the real mapper, not a hand-written ModelInfo.
+    const hfCandidate: HfCandidate = {
+      repoId: 'ornith-ai/Ornith-1.0-9B-GGUF',
+      author: 'ornith-ai',
+      url: 'https://huggingface.co/ornith-ai/Ornith-1.0-9B-GGUF',
+      parameterSizeB: 9,
+      availableQuants: ['Q4_K_M', 'Q5_K_M', 'Q6_K', 'Q8_0', 'BF16'],
+      signals: { downloads: 1, likes: 1, trendingScore: 1, lastModified: null },
+    };
+    const remote = hfCandidatesToModelInfo(
+      [hfCandidate],
+      (c) => `hf.co/${c.repoId}`
+    );
+    const result = await runCheck(
+      'mlx',
+      makeDeps({
+        backend: fixtureBackend({
+          loadedModels: async () => [],
+          remoteCandidates: async () => ({
+            candidates: remote,
+            sources: [{ id: 'huggingface', query: '', ok: true }],
+          }),
+        }),
+      })
+    );
+    const row = result.rows.find((r) => r.name === 'hf.co/ornith-ai/Ornith-1.0-9B-GGUF');
+    expect(row).toBeDefined();
+    expect(row!.quantizationLevel).toBe('Q4_K_M');
+    expect(row!.quantKnown).toBe(true);
   });
 
   it('uses the real size_vram for a model that is currently loaded, marked measured', async () => {
@@ -212,6 +249,42 @@ describe('runCheck', () => {
     expect(unknownQuant[0].evidence).toMatchObject({ quantizationLevel: 'UD-Q4_K_XL' });
   });
 
+  it('records no unknown-quant gap for a model whose quant is the string "unknown"', async () => {
+    const gaps = new GapCollector();
+    await runCheck('mlx', {
+      backend: fixtureBackend(),
+      probe: fixtureProbe(fakeSystem),
+      estimator: formulaEstimator,
+      gaps,
+    });
+    expect(gaps.list().filter((g) => g.kind === 'unknown-quant')).toEqual([]);
+  });
+
+  it('still records unknown-quant for a genuinely unrecognized quantization', async () => {
+    const gaps = new GapCollector();
+    await runCheck('mlx', {
+      backend: fixtureBackend({
+        localModels: async () => ({
+          models: [
+            {
+              name: 'weird:latest',
+              source: 'local',
+              url: null,
+              parameterSizeB: 7,
+              quantizationLevel: 'Q3_K_XL_TURBO',
+              diskSizeBytes: null,
+            },
+          ],
+          skipped: [],
+        }),
+      }),
+      probe: fixtureProbe(fakeSystem),
+      estimator: formulaEstimator,
+      gaps,
+    });
+    expect(gaps.list().map((g) => g.kind)).toContain('unknown-quant');
+  });
+
   it('records a scrape-failed gap and still returns local rows', async () => {
     const gaps = new GapCollector();
     const result = await runCheck(
@@ -270,6 +343,62 @@ describe('runCheck', () => {
       'remote source huggingface failed for backend ollama',
       'remote source huggingface failed for backend llama-server',
     ]);
+  });
+
+  it('orders remote rows by downloads descending, nulls last', async () => {
+    const result = await runCheck('mlx', {
+      backend: fixtureBackend({
+        remoteCandidates: async () => ({
+          candidates: [
+            { name: 'few', source: 'remote', url: null, parameterSizeB: 7, quantizationLevel: 'Q4_K_M', diskSizeBytes: null, signals: { downloads: 10, likes: 0, trendingScore: 99, lastModified: null } },
+            { name: 'none', source: 'remote', url: null, parameterSizeB: 7, quantizationLevel: 'Q4_K_M', diskSizeBytes: null, signals: { downloads: null, likes: 0, trendingScore: 50, lastModified: null } },
+            { name: 'many', source: 'remote', url: null, parameterSizeB: 7, quantizationLevel: 'Q4_K_M', diskSizeBytes: null, signals: { downloads: 5000, likes: 0, trendingScore: 1, lastModified: null } },
+          ],
+          sources: [{ id: 'huggingface', query: '', ok: true }],
+        }),
+      }),
+      probe: fixtureProbe(fakeSystem),
+      estimator: formulaEstimator,
+      gaps: new GapCollector(),
+    });
+
+    const remote = result.rows.filter((r) => r.source === 'remote').map((r) => r.name);
+    expect(remote).toEqual(['many', 'few', 'none']);
+  });
+
+  it('ranks a zero-downloads row above one with no download count at all', async () => {
+    // The `?? -1` in the ranking comparator is load-bearing: `|| -1` would
+    // treat `downloads: 0` as "no download signal" and tie it with the null
+    // row, leaving the input order (null first) untouched by the sort.
+    const result = await runCheck('mlx', {
+      backend: fixtureBackend({
+        remoteCandidates: async () => ({
+          candidates: [
+            { name: 'no-count', source: 'remote', url: null, parameterSizeB: 7, quantizationLevel: 'Q4_K_M', diskSizeBytes: null, signals: { downloads: null, likes: 0, trendingScore: 0, lastModified: null } },
+            { name: 'zero-count', source: 'remote', url: null, parameterSizeB: 7, quantizationLevel: 'Q4_K_M', diskSizeBytes: null, signals: { downloads: 0, likes: 0, trendingScore: 0, lastModified: null } },
+          ],
+          sources: [{ id: 'huggingface', query: '', ok: true }],
+        }),
+      }),
+      probe: fixtureProbe(fakeSystem),
+      estimator: formulaEstimator,
+      gaps: new GapCollector(),
+    });
+
+    const remote = result.rows.filter((r) => r.source === 'remote').map((r) => r.name);
+    expect(remote).toEqual(['zero-count', 'no-count']);
+  });
+
+  it('keeps local rows ahead of remote rows', async () => {
+    const result = await runCheck('mlx', {
+      backend: fixtureBackend(),
+      probe: fixtureProbe(fakeSystem),
+      estimator: formulaEstimator,
+      gaps: new GapCollector(),
+    });
+    const firstRemote = result.rows.findIndex((r) => r.source === 'remote');
+    const lastLocal = result.rows.map((r) => r.source).lastIndexOf('local');
+    expect(lastLocal).toBeLessThan(firstRemote);
   });
 
   it('produces no measured rows when the backend lacks loadedModels', async () => {
@@ -425,6 +554,442 @@ describe('remote discovery reporting', () => {
     );
     const remote = result.rows.filter((r) => r.source === 'remote');
     expect(remote.length).toBeGreaterThan(0);
-    expect(remote.every((r) => r.discoverySource === 'ollama.com')).toBe(true);
+    // fixtureBackend mirrors the real backend's two sources (ollama.com scrape
+    // + Hugging Face), so remote rows split across both discoverySources.
+    expect(remote.some((r) => r.discoverySource === 'ollama.com')).toBe(true);
+    expect(remote.some((r) => r.discoverySource === 'huggingface')).toBe(true);
+    expect(remote.every((r) => r.discoverySource === 'ollama.com' || r.discoverySource === 'huggingface')).toBe(
+      true
+    );
+  });
+
+  it('drops a remote candidate that is already pulled locally', async () => {
+    const result = await runCheck('mlx', {
+      backend: fixtureBackend({
+        localModels: async () => ({
+          models: [
+            { name: 'hf.co/o/r:Q4_K_M', source: 'local', url: null, parameterSizeB: 8, quantizationLevel: 'Q4_K_M', diskSizeBytes: 1 },
+          ],
+          skipped: [],
+        }),
+        remoteCandidates: async () => ({
+          candidates: [
+            { name: 'hf.co/o/r', source: 'remote', url: null, parameterSizeB: 8, quantizationLevel: 'Q4_K_M', diskSizeBytes: null },
+            { name: 'hf.co/other/repo', source: 'remote', url: null, parameterSizeB: 8, quantizationLevel: 'Q4_K_M', diskSizeBytes: null },
+          ],
+          sources: [{ id: 'huggingface', query: '', ok: true }],
+        }),
+      }),
+      probe: fixtureProbe(fakeSystem),
+      estimator: formulaEstimator,
+      gaps: new GapCollector(),
+    });
+
+    const remote = result.rows.filter((r) => r.source === 'remote').map((r) => r.name);
+    expect(remote).toEqual(['hf.co/other/repo']);
+  });
+
+  it('drops a remote candidate matching a collapsed-away alsoTagged name, not just the surviving row name', async () => {
+    // Regression: `ollama cp llama3.2:3b zzz-review-alias` collapses to one
+    // row named e.g. llama3.2:3b with alsoTagged: ['zzz-review-alias:latest'].
+    // localNames used to key off row names only, so 'zzz-review-alias' leaked
+    // back into PULLABLE as a candidate the user already has under another tag.
+    const result = await runCheck('mlx', {
+      backend: fixtureBackend({
+        localModels: async () => ({
+          models: [
+            {
+              name: 'llama3.2:3b',
+              source: 'local',
+              url: null,
+              parameterSizeB: 3,
+              quantizationLevel: 'Q4_K_M',
+              diskSizeBytes: 1,
+              alsoTagged: ['zzz-review-alias:latest'],
+            },
+          ],
+          skipped: [],
+        }),
+        remoteCandidates: async () => ({
+          candidates: [
+            { name: 'zzz-review-alias', source: 'remote', url: null, parameterSizeB: 3, quantizationLevel: 'Q4_K_M', diskSizeBytes: null },
+            { name: 'hf.co/other/repo', source: 'remote', url: null, parameterSizeB: 8, quantizationLevel: 'Q4_K_M', diskSizeBytes: null },
+          ],
+          sources: [{ id: 'huggingface', query: '', ok: true }],
+        }),
+      }),
+      probe: fixtureProbe(fakeSystem),
+      estimator: formulaEstimator,
+      gaps: new GapCollector(),
+    });
+
+    const remote = result.rows.filter((r) => r.source === 'remote').map((r) => r.name);
+    expect(remote).toEqual(['hf.co/other/repo']);
+  });
+
+  it('never filters a local model, even one that looks like an embedding model', async () => {
+    const result = await runCheck('mlx', {
+      backend: fixtureBackend({
+        localModels: async () => ({
+          models: [
+            { name: 'mxbai-embed-large', source: 'local', url: null, parameterSizeB: 0.3, quantizationLevel: 'Q4_K_M', diskSizeBytes: 1 },
+          ],
+          skipped: [],
+        }),
+        remoteCandidates: async () => ({
+          candidates: [
+            { name: 'some/other-embed-model', source: 'remote', url: null, parameterSizeB: 1, quantizationLevel: 'Q4_K_M', diskSizeBytes: null },
+          ],
+          sources: [{ id: 'huggingface', query: '', ok: true }],
+        }),
+      }),
+      probe: fixtureProbe(fakeSystem),
+      estimator: formulaEstimator,
+      gaps: new GapCollector(),
+    });
+
+    expect(result.rows.map((r) => r.name)).toEqual(['mxbai-embed-large']);
+  });
+});
+
+describe('fitGroup', () => {
+  it('groups agreement under the shared verdict', () => {
+    expect(fitGroup('comfortable', 'comfortable')).toBe('comfortable');
+    expect(fitGroup('tight', 'tight')).toBe('tight');
+  });
+
+  it('reports pressured when right-now is worse than the baseline budget', () => {
+    expect(fitGroup('comfortable', 'tight')).toBe('pressured');
+    expect(fitGroup('comfortable', 'will-thrash')).toBe('pressured');
+    expect(fitGroup('tight', 'will-thrash')).toBe('pressured');
+  });
+
+  it('reports over-budget when the model fits right now but not the safe budget', () => {
+    expect(fitGroup('will-thrash', 'tight')).toBe('over-budget');
+    expect(fitGroup('will-thrash', 'comfortable')).toBe('over-budget');
+    expect(fitGroup('tight', 'comfortable')).toBe('tight');
+  });
+
+  it('keeps a model that fits nowhere out of over-budget', () => {
+    // Equal severities don't trip `pressured`, so a naive
+    // `baseline === 'will-thrash'` test would file this under a header
+    // reading "fits right now". It fits nowhere.
+    expect(fitGroup('will-thrash', 'will-thrash')).toBe('will-thrash');
+  });
+
+  it('is unclassified when the baseline verdict is unknown', () => {
+    expect(fitGroup('unknown', 'unknown')).toBe('unclassified');
+    expect(fitGroup('unknown', 'comfortable')).toBe('unclassified');
+  });
+
+  it('falls back to the baseline when only current is unknown', () => {
+    expect(fitGroup('comfortable', 'unknown')).toBe('comfortable');
+    expect(fitGroup('will-thrash', 'unknown')).toBe('will-thrash');
+  });
+});
+
+it('puts a fit group on every row', async () => {
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend(),
+    probe: fixtureProbe(fakeSystem),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  for (const row of result.rows) {
+    expect(row.fit).toBeDefined();
+  }
+});
+
+it('carries collapsed tags through to the check row', async () => {
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend(),
+    probe: fixtureProbe(fakeSystem),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  const collapsed = result.rows.find((r) => r.name.includes('gemma-4-12B-agentic'));
+  expect(collapsed?.alsoTagged).toEqual([
+    'hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:latest',
+  ]);
+});
+
+it('leaves alsoTagged absent on a single-tag model', async () => {
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend(),
+    probe: fixtureProbe(fakeSystem),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  const single = result.rows.find((r) => r.name === 'gemma3:12b');
+  expect(single).toBeDefined();
+  expect('alsoTagged' in single!).toBe(false);
+});
+
+it('recommends the largest comfortable local model and the top comfortable candidate', async () => {
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend(),
+    probe: fixtureProbe(fakeSystem),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+
+  const local = result.rows.filter((r) => r.source === 'local' && r.fit === 'comfortable');
+  const largest = local.reduce((a, b) => ((b.footprintGb ?? 0) > (a.footprintGb ?? 0) ? b : a));
+  expect(result.recommendations.runNow).toBe(largest.name);
+
+  const topRemote = result.rows.find((r) => r.source === 'remote' && r.fit === 'comfortable');
+  expect(result.recommendations.worthPulling).toBe(topRemote?.name ?? null);
+});
+
+it('names a larger over-budget local model as the bigger option', async () => {
+  // fakeSystem's wiredGb (3.8) puts gemma3:27b's currentVerdict at
+  // will-thrash too (see "classifies gemma3:27b as will-thrash under current
+  // headroom" above), so fitGroup collapses it to 'will-thrash' rather than
+  // 'over-budget' -- it fits nowhere, so there's nothing to prefer it over.
+  // A slightly lower wiredGb (3.2, matching output-guardrail.test.ts's SYSTEM,
+  // which classifies this same row 'over-budget' in guardrail-check.json)
+  // gives it enough current headroom to land in 'tight' instead, which is the
+  // scenario this test means to exercise: fits right now, rejected by the
+  // conservative baseline budget.
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend(),
+    probe: fixtureProbe({ ...fakeSystem, wiredGb: 3.2 }),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  // gemma3:27b is over-budget against the 16GB baseline and larger than any
+  // comfortable row, so it must surface as the bigger-but-riskier option.
+  expect(result.recommendations.runNowBigger).toBe('gemma3:27b');
+});
+
+it('returns nulls when a side has no qualifying row', async () => {
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend({
+      localModels: async () => ({ models: [], skipped: [] }),
+      remoteCandidates: async () => ({ candidates: [], sources: [] }),
+    }),
+    probe: fixtureProbe(fakeSystem),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  expect(result.recommendations).toEqual({
+    runNow: null,
+    runNowFit: null,
+    runNowBigger: null,
+    worthPulling: null,
+  });
+});
+
+it('recommends the best available group when nothing is comfortable', async () => {
+  // A machine under pressure: nothing classifies comfortable, so Run now must
+  // still name something rather than going silent. Requiring 'comfortable'
+  // here would regress aa4a7d0. Under fakeSystem, big:latest (27B) lands
+  // 'over-budget' (fits current headroom, not the baseline budget) while
+  // bigger:latest (30B) fits nowhere ('will-thrash') — over-budget is still on
+  // the RUN_NOW_PREFERENCE ladder, so big:latest must win outright, not by
+  // falling through to any fallback tier.
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend({
+      localModels: async () => ({
+        models: [
+          { name: 'big:latest', source: 'local', url: null, parameterSizeB: 27, quantizationLevel: 'Q4_K_M', diskSizeBytes: 1 },
+          { name: 'bigger:latest', source: 'local', url: null, parameterSizeB: 30, quantizationLevel: 'Q4_K_M', diskSizeBytes: 1 },
+        ],
+        skipped: [],
+      }),
+      remoteCandidates: async () => ({ candidates: [], sources: [] }),
+    }),
+    probe: fixtureProbe(fakeSystem),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  expect(result.recommendations.runNow).toBe('big:latest');
+  expect(result.recommendations.runNowFit).toBe('over-budget');
+  expect(result.recommendations.worthPulling).toBeNull();
+});
+
+describe('recommend (Run now ladder and fallback)', () => {
+  function localRow(overrides: Partial<import('../src/check.js').CheckRow> = {}): import('../src/check.js').CheckRow {
+    return {
+      name: 'model',
+      source: 'local',
+      url: null,
+      parameterSizeB: 8,
+      quantizationLevel: 'Q4_K_M',
+      footprintGb: 8,
+      estimateSource: 'estimated',
+      quantKnown: true,
+      baselineVerdict: 'comfortable',
+      currentVerdict: 'comfortable',
+      fit: 'comfortable',
+      ...overrides,
+    };
+  }
+
+  it('prefers comfortable over pressured, whatever the sizes', () => {
+    const rows = [
+      localRow({ name: 'small-comfortable', footprintGb: 2, fit: 'comfortable' }),
+      localRow({ name: 'huge-pressured', footprintGb: 40, fit: 'pressured' }),
+    ];
+    expect(recommend(rows).runNow).toBe('small-comfortable');
+    expect(recommend(rows).runNowFit).toBe('comfortable');
+  });
+
+  it('prefers pressured over tight, whatever the sizes', () => {
+    const rows = [
+      localRow({ name: 'small-pressured', footprintGb: 2, fit: 'pressured' }),
+      localRow({ name: 'huge-tight', footprintGb: 40, fit: 'tight' }),
+    ];
+    expect(recommend(rows).runNow).toBe('small-pressured');
+    expect(recommend(rows).runNowFit).toBe('pressured');
+  });
+
+  it('prefers tight over over-budget, whatever the sizes', () => {
+    const rows = [
+      localRow({ name: 'small-tight', footprintGb: 2, fit: 'tight' }),
+      localRow({ name: 'huge-over-budget', footprintGb: 40, fit: 'over-budget' }),
+    ];
+    expect(recommend(rows).runNow).toBe('small-tight');
+    expect(recommend(rows).runNowFit).toBe('tight');
+  });
+
+  it('falls back to the largest unclassified row when no ladder group has rows', () => {
+    const rows = [
+      localRow({
+        name: 'small-will-thrash',
+        footprintGb: 10,
+        fit: 'will-thrash',
+        baselineVerdict: 'will-thrash',
+        currentVerdict: 'will-thrash',
+      }),
+      localRow({
+        name: 'small-unclassified',
+        footprintGb: null,
+        parameterSizeB: null,
+        quantizationLevel: null,
+        baselineVerdict: 'unknown',
+        currentVerdict: 'unknown',
+        fit: 'unclassified',
+      }),
+      localRow({
+        name: 'big-unclassified',
+        footprintGb: null,
+        parameterSizeB: null,
+        quantizationLevel: null,
+        baselineVerdict: 'unknown',
+        currentVerdict: 'unknown',
+        fit: 'unclassified',
+      }),
+    ];
+    // Unclassified beats will-thrash even though will-thrash carries a real
+    // footprint — this is the aa4a7d0 case: benching an unclassified model is
+    // how it becomes classifiable, so it must win over a model already known
+    // to fit nowhere.
+    const result = recommend(rows);
+    expect(result.runNow).toBe('small-unclassified');
+    expect(result.runNowFit).toBe('unclassified');
+  });
+
+  it('falls back to the smallest will-thrash row when not even unclassified exists', () => {
+    const rows = [
+      localRow({
+        name: 'huge-will-thrash',
+        footprintGb: 30,
+        fit: 'will-thrash',
+        baselineVerdict: 'will-thrash',
+        currentVerdict: 'will-thrash',
+      }),
+      localRow({
+        name: 'small-will-thrash',
+        footprintGb: 10,
+        fit: 'will-thrash',
+        baselineVerdict: 'will-thrash',
+        currentVerdict: 'will-thrash',
+      }),
+    ];
+    const result = recommend(rows);
+    expect(result.runNow).toBe('small-will-thrash');
+    expect(result.runNowFit).toBe('will-thrash');
+  });
+
+  it('never recommends a remote row', () => {
+    const rows = [
+      { ...localRow({ name: 'remote-comfortable', footprintGb: 2, fit: 'comfortable' }), source: 'remote' as const },
+    ];
+    expect(recommend(rows).runNow).toBeNull();
+    expect(recommend(rows).runNowFit).toBeNull();
+  });
+});
+
+it('prefers a classifiable row over an unclassified one when both are present', async () => {
+  // RUN_NOW_PREFERENCE deliberately omits 'unclassified' — a row check couldn't
+  // classify shouldn't win over one it could, even though there's nothing
+  // stopping recommend() from falling through to local[0] the way the
+  // all-unclassified case does below. Order the unclassified row first so a
+  // naive local[0] fallback would wrongly name it if this regressed.
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend({
+      localModels: async () => ({
+        models: [
+          { name: 'unclassified:latest', source: 'local', url: null, parameterSizeB: null, quantizationLevel: null, diskSizeBytes: null },
+          { name: 'classified:latest', source: 'local', url: null, parameterSizeB: 8, quantizationLevel: 'Q4_K_M', diskSizeBytes: 1 },
+        ],
+        skipped: [],
+      }),
+      remoteCandidates: async () => ({ candidates: [], sources: [] }),
+    }),
+    probe: fixtureProbe(fakeSystem),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  expect(result.recommendations.runNow).toBe('classified:latest');
+});
+
+it('falls back to the first local row when every row is unclassified', async () => {
+  // llama-server reports no size for a model it has never loaded. Benching it
+  // is exactly how it becomes classifiable, so it must still be named.
+  const result = await runCheck('mlx', {
+    backend: fixtureBackend({
+      localModels: async () => ({
+        models: [
+          { name: 'never-loaded:latest', source: 'local', url: null, parameterSizeB: null, quantizationLevel: null, diskSizeBytes: null },
+        ],
+        skipped: [],
+      }),
+      remoteCandidates: async () => ({ candidates: [], sources: [] }),
+    }),
+    probe: fixtureProbe(fakeSystem),
+    estimator: formulaEstimator,
+    gaps: new GapCollector(),
+  });
+  expect(result.recommendations.runNow).toBe('never-loaded:latest');
+});
+
+describe('untagged', () => {
+  it('strips an Ollama tag', () => {
+    expect(untagged('gemma3:12b')).toBe('gemma3');
+    expect(untagged('hf.co/o/r:Q4_K_M')).toBe('hf.co/o/r');
+  });
+
+  it('leaves a name with no tag alone', () => {
+    expect(untagged('mistrallite')).toBe('mistrallite');
+    expect(untagged('hf.co/o/r')).toBe('hf.co/o/r');
+  });
+
+  it('does not mistake a namespace colon for a tag', () => {
+    expect(untagged('hf.co/owner:weird/repo')).toBe('hf.co/owner:weird/repo');
+  });
+});
+
+describe('isNonChat', () => {
+  it('flags embedding and reranker models', () => {
+    expect(isNonChat('mxbai-embed-large')).toBe(true);
+    expect(isNonChat('charaf/qwen3-embedding-8b-mlx-mxfp8')).toBe(true);
+    expect(isNonChat('BAAI/bge-reranker-v2-m3')).toBe(true);
+  });
+
+  it('does not flag ordinary chat models', () => {
+    expect(isNonChat('gemma3:12b')).toBe(false);
+    expect(isNonChat('ornith-ai/Ornith-1.0-9B-GGUF')).toBe(false);
   });
 });

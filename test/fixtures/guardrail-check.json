@@ -10,7 +10,8 @@
       "estimateSource": "estimated",
       "quantKnown": true,
       "baselineVerdict": "comfortable",
-      "currentVerdict": "comfortable"
+      "currentVerdict": "comfortable",
+      "fit": "comfortable"
     },
     {
       "name": "gemma3:12b",
@@ -22,7 +23,8 @@
       "estimateSource": "measured",
       "quantKnown": true,
       "baselineVerdict": "comfortable",
-      "currentVerdict": "comfortable"
+      "currentVerdict": "comfortable",
+      "fit": "comfortable"
     },
     {
       "name": "gemma3:27b",
@@ -34,7 +36,8 @@
       "estimateSource": "estimated",
       "quantKnown": true,
       "baselineVerdict": "will-thrash",
-      "currentVerdict": "tight"
+      "currentVerdict": "tight",
+      "fit": "over-budget"
     },
     {
       "name": "llama3.2:3b",
@@ -46,20 +49,283 @@
       "estimateSource": "estimated",
       "quantKnown": true,
       "baselineVerdict": "comfortable",
-      "currentVerdict": "comfortable"
+      "currentVerdict": "comfortable",
+      "fit": "comfortable"
     },
     {
-      "name": "mxbai-embed-large",
-      "source": "remote",
-      "url": "https://ollama.com/library/mxbai-embed-large",
-      "parameterSizeB": 0.335,
+      "name": "hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:Q4_K_M",
+      "source": "local",
+      "url": null,
+      "parameterSizeB": 11.9,
       "quantizationLevel": "Q4_K_M",
-      "footprintGb": 0.23554687500000002,
+      "footprintGb": 8.3671875,
       "estimateSource": "estimated",
-      "quantKnown": false,
+      "quantKnown": true,
       "baselineVerdict": "comfortable",
       "currentVerdict": "comfortable",
-      "discoverySource": "ollama.com"
+      "fit": "comfortable",
+      "alsoTagged": [
+        "hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:latest"
+      ]
+    },
+    {
+      "name": "hf.co/ornith-ai/Ornith-1.0-9B-GGUF",
+      "source": "remote",
+      "url": "https://huggingface.co/ornith-ai/Ornith-1.0-9B-GGUF",
+      "parameterSizeB": 8.953803264,
+      "quantizationLevel": "Q4_K_M",
+      "footprintGb": 6.29564292,
+      "estimateSource": "estimated",
+      "quantKnown": true,
+      "baselineVerdict": "comfortable",
+      "currentVerdict": "comfortable",
+      "fit": "comfortable",
+      "author": "ornith-ai",
+      "availableQuants": [
+        "Q4_K_M",
+        "Q5_K_M",
+        "Q6_K",
+        "Q8_0",
+        "BF16"
+      ],
+      "signals": {
+        "downloads": 4567553,
+        "likes": 615,
+        "trendingScore": 19,
+        "lastModified": "2026-06-25T14:12:12.000Z"
+      },
+      "discoverySource": "huggingface"
+    },
+    {
+      "name": "hf.co/yuxinlu1/gemma-4-12B-coder-fable5-composer2.5-v1-GGUF",
+      "source": "remote",
+      "url": "https://huggingface.co/yuxinlu1/gemma-4-12B-coder-fable5-composer2.5-v1-GGUF",
+      "parameterSizeB": 11.907350576,
+      "quantizationLevel": "Q4_K_M",
+      "footprintGb": 8.372355873750001,
+      "estimateSource": "estimated",
+      "quantKnown": true,
+      "baselineVerdict": "comfortable",
+      "currentVerdict": "comfortable",
+      "fit": "comfortable",
+      "author": "yuxinlu1",
+      "availableQuants": [
+        "Q2_K",
+        "Q3_K_M",
+        "Q4_K_M",
+        "Q6_K",
+        "Q8_0"
+      ],
+      "signals": {
+        "downloads": 282466,
+        "likes": 2812,
+        "trendingScore": 19,
+        "lastModified": "2026-06-19T03:52:11.000Z"
+      },
+      "discoverySource": "huggingface"
+    },
+    {
+      "name": "hf.co/RavichandranJ/Dolphin3-Cyber-8B-GGUF",
+      "source": "remote",
+      "url": "https://huggingface.co/RavichandranJ/Dolphin3-Cyber-8B-GGUF",
+      "parameterSizeB": 8.030277696,
+      "quantizationLevel": "Q4_K_M",
+      "footprintGb": 5.646289005,
+      "estimateSource": "estimated",
+      "quantKnown": true,
+      "baselineVerdict": "comfortable",
+      "currentVerdict": "comfortable",
+      "fit": "comfortable",
+      "author": "RavichandranJ",
+      "availableQuants": [
+        "F16",
+        "Q2_K",
+        "Q3_K_M",
+        "Q4_0",
+        "Q4_K_M",
+        "Q4_K_S",
+        "Q5_0",
+        "Q5_K_M",
+        "Q5_K_S",
+        "Q6_K",
+        "Q8_0"
+      ],
+      "signals": {
+        "downloads": 56275,
+        "likes": 144,
+        "trendingScore": 16,
+        "lastModified": "2026-06-08T20:16:05.000Z"
+      },
+      "discoverySource": "huggingface"
+    },
+    {
+      "name": "hf.co/LiquidAI/LFM2.5-8B-A1B-GGUF",
+      "source": "remote",
+      "url": "https://huggingface.co/LiquidAI/LFM2.5-8B-A1B-GGUF",
+      "parameterSizeB": 8.467856832,
+      "quantizationLevel": "Q4_K_M",
+      "footprintGb": 5.953961835,
+      "estimateSource": "estimated",
+      "quantKnown": true,
+      "baselineVerdict": "comfortable",
+      "currentVerdict": "comfortable",
+      "fit": "comfortable",
+      "author": "LiquidAI",
+      "availableQuants": [
+        "BF16",
+        "F16",
+        "Q4_0",
+        "Q4_K_M",
+        "Q5_K_M",
+        "Q6_K",
+        "Q8_0"
+      ],
+      "signals": {
+        "downloads": 51994,
+        "likes": 269,
+        "trendingScore": 14,
+        "lastModified": "2026-05-29T16:25:34.000Z"
+      },
+      "discoverySource": "huggingface"
+    },
+    {
+      "name": "hf.co/Jackrong/DeepSeek-V4-Pro-Qwen3.5-9B-MTP-GGUF",
+      "source": "remote",
+      "url": "https://huggingface.co/Jackrong/DeepSeek-V4-Pro-Qwen3.5-9B-MTP-GGUF",
+      "parameterSizeB": 9.197093888,
+      "quantizationLevel": "Q4_K_M",
+      "footprintGb": 6.46670664,
+      "estimateSource": "estimated",
+      "quantKnown": true,
+      "baselineVerdict": "comfortable",
+      "currentVerdict": "comfortable",
+      "fit": "comfortable",
+      "author": "Jackrong",
+      "availableQuants": [
+        "BF16",
+        "IQ4_XS",
+        "Q2_K",
+        "Q3_K_L",
+        "Q3_K_M",
+        "Q3_K_S",
+        "Q4_K_M",
+        "Q4_K_S",
+        "Q5_K_M",
+        "Q5_K_S",
+        "Q6_K",
+        "Q8_0"
+      ],
+      "signals": {
+        "downloads": 43993,
+        "likes": 42,
+        "trendingScore": 42,
+        "lastModified": "2026-08-07T00:19:13.000Z"
+      },
+      "discoverySource": "huggingface"
+    },
+    {
+      "name": "hf.co/LiquidAI/LFM2.5-2.6B-GGUF",
+      "source": "remote",
+      "url": "https://huggingface.co/LiquidAI/LFM2.5-2.6B-GGUF",
+      "parameterSizeB": 2.697198592,
+      "quantizationLevel": "Q4_K_M",
+      "footprintGb": 1.89646776,
+      "estimateSource": "estimated",
+      "quantKnown": true,
+      "baselineVerdict": "comfortable",
+      "currentVerdict": "comfortable",
+      "fit": "comfortable",
+      "author": "LiquidAI",
+      "availableQuants": [
+        "BF16",
+        "F16",
+        "Q4_0",
+        "Q4_K_M",
+        "Q5_K_M",
+        "Q6_K",
+        "Q8_0"
+      ],
+      "signals": {
+        "downloads": 31489,
+        "likes": 142,
+        "trendingScore": 135,
+        "lastModified": "2026-08-06T17:10:07.000Z"
+      },
+      "discoverySource": "huggingface"
+    },
+    {
+      "name": "hf.co/fraQtl/Gemma-4-E2B-it-Hi-Fi-GGUF",
+      "source": "remote",
+      "url": "https://huggingface.co/fraQtl/Gemma-4-E2B-it-Hi-Fi-GGUF",
+      "parameterSizeB": 4.647450147,
+      "quantizationLevel": "Q4_K_M",
+      "footprintGb": 3.267738384609375,
+      "estimateSource": "estimated",
+      "quantKnown": true,
+      "baselineVerdict": "comfortable",
+      "currentVerdict": "comfortable",
+      "fit": "comfortable",
+      "author": "fraQtl",
+      "availableQuants": [
+        "Q4_K_M",
+        "IQ3XXS"
+      ],
+      "signals": {
+        "downloads": 2069,
+        "likes": 15,
+        "trendingScore": 15,
+        "lastModified": "2026-08-07T14:29:29.000Z"
+      },
+      "discoverySource": "huggingface"
+    },
+    {
+      "name": "hf.co/KBlueLeaf/TIPOv2-1B-A200M",
+      "source": "remote",
+      "url": "https://huggingface.co/KBlueLeaf/TIPOv2-1B-A200M",
+      "parameterSizeB": 1.006513856,
+      "quantizationLevel": "Q8_0",
+      "footprintGb": 1.25814232,
+      "estimateSource": "estimated",
+      "quantKnown": true,
+      "baselineVerdict": "comfortable",
+      "currentVerdict": "comfortable",
+      "fit": "comfortable",
+      "author": "KBlueLeaf",
+      "availableQuants": [
+        "F16",
+        "Q8_0"
+      ],
+      "signals": {
+        "downloads": 1659,
+        "likes": 27,
+        "trendingScore": 25,
+        "lastModified": "2026-08-04T21:03:51.000Z"
+      },
+      "discoverySource": "huggingface"
+    },
+    {
+      "name": "hf.co/SupraLabs/Supra2-100M-Instruct",
+      "source": "remote",
+      "url": "https://huggingface.co/SupraLabs/Supra2-100M-Instruct",
+      "parameterSizeB": 0.100684032,
+      "quantizationLevel": "F16",
+      "footprintGb": 0.25171008,
+      "estimateSource": "estimated",
+      "quantKnown": true,
+      "baselineVerdict": "comfortable",
+      "currentVerdict": "comfortable",
+      "fit": "comfortable",
+      "author": "SupraLabs",
+      "availableQuants": [
+        "F16"
+      ],
+      "signals": {
+        "downloads": 928,
+        "likes": 32,
+        "trendingScore": 32,
+        "lastModified": "2026-08-05T10:34:14.000Z"
+      },
+      "discoverySource": "huggingface"
     },
     {
       "name": "mistrallite",
@@ -72,6 +338,7 @@
       "quantKnown": false,
       "baselineVerdict": "comfortable",
       "currentVerdict": "comfortable",
+      "fit": "comfortable",
       "discoverySource": "ollama.com"
     },
     {
@@ -85,6 +352,7 @@
       "quantKnown": false,
       "baselineVerdict": "comfortable",
       "currentVerdict": "comfortable",
+      "fit": "comfortable",
       "discoverySource": "ollama.com"
     },
     {
@@ -98,6 +366,7 @@
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
       "currentVerdict": "will-thrash",
+      "fit": "will-thrash",
       "discoverySource": "ollama.com"
     },
     {
@@ -111,6 +380,7 @@
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
       "currentVerdict": "will-thrash",
+      "fit": "will-thrash",
       "discoverySource": "ollama.com"
     },
     {
@@ -124,6 +394,7 @@
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
       "currentVerdict": "tight",
+      "fit": "over-budget",
       "discoverySource": "ollama.com"
     },
     {
@@ -137,19 +408,7 @@
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
       "currentVerdict": "will-thrash",
-      "discoverySource": "ollama.com"
-    },
-    {
-      "name": "cyborgxx101/gemma-4-12b-opus-finetuned-mlx",
-      "source": "remote",
-      "url": "https://ollama.com/cyborgxx101/gemma-4-12b-opus-finetuned-mlx",
-      "parameterSizeB": 12,
-      "quantizationLevel": "Q4_K_M",
-      "footprintGb": 8.4375,
-      "estimateSource": "estimated",
-      "quantKnown": false,
-      "baselineVerdict": "comfortable",
-      "currentVerdict": "comfortable",
+      "fit": "will-thrash",
       "discoverySource": "ollama.com"
     },
     {
@@ -163,6 +422,7 @@
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
       "currentVerdict": "will-thrash",
+      "fit": "will-thrash",
       "discoverySource": "ollama.com"
     },
     {
@@ -176,6 +436,7 @@
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
       "currentVerdict": "tight",
+      "fit": "over-budget",
       "discoverySource": "ollama.com"
     },
     {
@@ -189,6 +450,7 @@
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
       "currentVerdict": "tight",
+      "fit": "over-budget",
       "discoverySource": "ollama.com"
     },
     {
@@ -202,6 +464,7 @@
       "quantKnown": false,
       "baselineVerdict": "tight",
       "currentVerdict": "comfortable",
+      "fit": "tight",
       "discoverySource": "ollama.com"
     },
     {
@@ -215,19 +478,7 @@
       "quantKnown": false,
       "baselineVerdict": "will-thrash",
       "currentVerdict": "will-thrash",
-      "discoverySource": "ollama.com"
-    },
-    {
-      "name": "charaf/qwen3-embedding-8b-mlx-mxfp8",
-      "source": "remote",
-      "url": "https://ollama.com/charaf/qwen3-embedding-8b-mlx-mxfp8",
-      "parameterSizeB": 8,
-      "quantizationLevel": "Q4_K_M",
-      "footprintGb": 5.625,
-      "estimateSource": "estimated",
-      "quantKnown": false,
-      "baselineVerdict": "comfortable",
-      "currentVerdict": "comfortable",
+      "fit": "will-thrash",
       "discoverySource": "ollama.com"
     },
     {
@@ -241,6 +492,7 @@
       "quantKnown": false,
       "baselineVerdict": "comfortable",
       "currentVerdict": "comfortable",
+      "fit": "comfortable",
       "discoverySource": "ollama.com"
     },
     {
@@ -254,9 +506,16 @@
       "quantKnown": false,
       "baselineVerdict": "comfortable",
       "currentVerdict": "comfortable",
+      "fit": "comfortable",
       "discoverySource": "ollama.com"
     }
   ],
+  "recommendations": {
+    "runNow": "gemma3:12b",
+    "runNowFit": "comfortable",
+    "runNowBigger": "gemma3:27b",
+    "worthPulling": "hf.co/ornith-ai/Ornith-1.0-9B-GGUF"
+  },
   "cloudModels": [
     "glm-5.2:cloud",
     "mistral-large-3:675b-cloud",
@@ -291,7 +550,12 @@
       "id": "ollama.com",
       "query": "mlx",
       "ok": true
+    },
+    {
+      "id": "huggingface",
+      "query": "mlx",
+      "ok": true
     }
   ],
-  "remoteGuidance": null
+  "remoteGuidance": "Remote candidates come from the Hugging Face Hub (trending, size-capped to this machine's headroom) and are NOT vetted. Qualify the source before pulling:\n- Trustworthy: official model-vendor orgs (Qwen, meta-llama, google, microsoft, LiquidAI) and quant houses with a history across many model families (examples: ggml-org, bartowski, unsloth, lmstudio-community). A verified-org badge on the repo page is a good sign.\n- Distrust: single-model orgs; names stuffed with \"uncensored\"/\"abliterated\"/merge word salad; download counts wildly out of proportion to likes and account age — download counts are botted in practice, never trust them alone.\nEach candidate lists availableQuants; pull as <owner>/<repo>:<QUANT>."
 }

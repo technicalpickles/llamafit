@@ -6,7 +6,6 @@ const CODES = {
   red: '\x1b[31m',
   yellow: '\x1b[33m',
   blue: '\x1b[34m',
-  gray: '\x1b[90m',
 } as const;
 
 export const SYMBOLS = {
@@ -47,21 +46,6 @@ export function label(text: string, enabled: boolean): string {
  * primary line above it. */
 export function dim(text: string, enabled: boolean): string {
   return paint(CODES.dim, text, enabled);
-}
-
-/** Verdict text already conveys its own meaning ("will-thrash" reads as bad without
- * color), so color here is reinforcement, not the only signal. */
-export function colorizeVerdict(verdict: string, enabled: boolean): string {
-  switch (verdict) {
-    case 'comfortable':
-      return paint(CODES.green, verdict, enabled);
-    case 'tight':
-      return paint(CODES.yellow, verdict, enabled);
-    case 'will-thrash':
-      return paint(CODES.red, verdict, enabled);
-    default:
-      return paint(CODES.gray, verdict, enabled);
-  }
 }
 
 export function colorizeBenchStatus(status: string, enabled: boolean): string {

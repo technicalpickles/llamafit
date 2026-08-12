@@ -15,12 +15,57 @@ import {
   unloadModel,
   isCloudModel,
   parseParameterSize,
+  normalizeQuant,
+  quantFromTag,
   type OllamaTagsResponse,
   type OllamaPsResponse,
 } from './client.js';
 import { scrapeSearch, type RemoteModelCandidate } from './scrape.js';
 import { searchGgufModels, type HfCandidate } from '../../hf/discovery.js';
 import { hfCandidatesToModelInfo } from '../../hf/model-info.js';
+import { loadQuantTable } from '../../data.js';
+
+/** Two tags pointing at the same digest are the same weights, so they are one
+ * row. Representative choice prefers a tag whose quantization already
+ * resolved -- which only means something if this runs after quant resolution,
+ * not before. Run it before, and every candidate's quantizationLevel is still
+ * null at collapse time, so that preference can never fire; the fallback is
+ * shortest-name with an insertion-order tie-break, which for same-length tags
+ * (e.g. `:latest` and `:Q4_K_M`, both 6 chars after the colon) is decided by
+ * fixture ordering, not by anything meaningful. */
+export function collapseByDigest(models: ModelInfo[]): ModelInfo[] {
+  const groups = new Map<string, ModelInfo[]>();
+  const out: ModelInfo[] = [];
+
+  for (const model of models) {
+    if (model.digest === undefined) {
+      out.push(model);
+      continue;
+    }
+    const existing = groups.get(model.digest);
+    if (existing) {
+      existing.push(model);
+    } else {
+      const group: ModelInfo[] = [model];
+      groups.set(model.digest, group);
+      // Placeholder holds this digest's slot so first-appearance order survives.
+      out.push(model);
+    }
+  }
+
+  return out.map((model) => {
+    if (model.digest === undefined) return model;
+    const group = groups.get(model.digest)!;
+    if (group.length === 1) return model;
+    const best =
+      group.find((m) => m.quantizationLevel !== null) ??
+      group.reduce((a, b) => (b.name.length < a.name.length ? b : a));
+    return {
+      ...best,
+      alsoTagged: group.filter((m) => m.name !== best.name).map((m) => m.name),
+    };
+  });
+}
 
 export function mapTagsToLocalModels(tags: OllamaTagsResponse): LocalModels {
   const models: ModelInfo[] = [];
@@ -39,19 +84,22 @@ export function mapTagsToLocalModels(tags: OllamaTagsResponse): LocalModels {
       source: 'local',
       url: null,
       parameterSizeB: parseParameterSize(model.details.parameter_size),
-      quantizationLevel: model.details.quantization_level || null,
+      quantizationLevel:
+        normalizeQuant(model.details.quantization_level) ??
+        quantFromTag(model.name, loadQuantTable()),
       diskSizeBytes: model.size,
+      digest: model.digest,
     });
   }
 
-  return { models, skipped };
+  return { models: collapseByDigest(models), skipped };
 }
 
 export function mapPsToLoaded(ps: OllamaPsResponse): LoadedModel[] {
   return ps.models.map((model) => ({
     name: model.name,
     sizeVramGb: model.size_vram / 1e9,
-    quantizationLevel: model.details.quantization_level || null,
+    quantizationLevel: normalizeQuant(model.details.quantization_level),
   }));
 }
 
@@ -97,10 +145,6 @@ async function localModels(): Promise<LocalModels> {
   return mapTagsToLocalModels(tags);
 }
 
-/** ollama.com's historical search default, applied when the user gave no query.
- * The HF source defaults to '' — bare trending, matching llama-server. */
-const SCRAPE_DEFAULT_QUERY = 'mlx';
-
 /** ollama pulls HF repos as `ollama pull hf.co/<owner>/<repo>[:<quant>]`; the
  * quant tag is the caller's pick from availableQuants. */
 function hfPullName(c: HfCandidate): string {
@@ -111,7 +155,12 @@ async function remoteCandidates(
   query?: string,
   opts: RemoteCandidateOptions = {}
 ): Promise<RemoteDiscovery> {
-  const scrapeQuery = query ?? SCRAPE_DEFAULT_QUERY;
+  // No query means "show me what's relevant and fits", not "filter to one
+  // arbitrary slice". A hardcoded default query is a filter: 'mlx' used to
+  // live here and selected four 35B and three 27B models against a 16GB
+  // budget, plus whatever reuploaders had appended the tag. MLX-tagged models
+  // are ordinary GGUFs and still appear when they rank well or via --query.
+  const scrapeQuery = query ?? '';
   const hfQuery = query ?? '';
   // allSettled: the sources fail independently — one being down must not
   // blank the other's rows.
